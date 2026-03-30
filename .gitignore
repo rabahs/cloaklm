@@ -28,6 +28,9 @@ dist-ssr
 __pycache__/
 *.pyc
 sidecar/__pycache__/
+sidecar/build/
+sidecar/*.spec
 
 # Tauri
 src-tauri/target/
+src-tauri/binaries/

@@ -34,6 +34,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [engineStatus, setEngineStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const dragCounter = useRef(0);
 
   // Derive provider from settings
@@ -144,6 +145,31 @@ function App() {
         );
       }
     });
+  }, []);
+
+  // Poll sidecar health on startup
+  useEffect(() => {
+    let interval: number;
+    let attempts = 0;
+    const checkHealth = async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:4321/health");
+        if (res.ok) {
+          setEngineStatus('ready');
+          clearInterval(interval);
+        }
+      } catch (e) {
+        attempts++;
+        if (attempts > 60) { // 2 minutes timeout
+          setEngineStatus('error');
+          clearInterval(interval);
+        }
+      }
+    };
+
+    checkHealth();
+    interval = window.setInterval(checkHealth, 2000);
+    return () => clearInterval(interval);
   }, []);
 
   // Handle native Tauri OS Drag & Drop
@@ -299,7 +325,17 @@ function App() {
         hasMessages={messages.length > 0}
       />
 
-      <main className="flex-1 overflow-hidden flex flex-col">
+      <main className="flex-1 overflow-hidden flex flex-col relative">
+        {engineStatus === 'loading' && (
+          <div className="absolute top-0 left-0 right-0 bg-primary/10 border-b border-primary/20 p-2 text-center text-sm text-primary animate-pulse z-10">
+            🛡️ CloakLM Shield is initializing AI models... (30-40 seconds)
+          </div>
+        )}
+        {engineStatus === 'error' && (
+          <div className="absolute top-0 left-0 right-0 bg-red-500/10 border-b border-red-500/20 p-2 text-center text-sm text-red-500 z-10">
+            ⚠️ AI Engine failed to start. Please restart the application.
+          </div>
+        )}
         {messages.length === 0 ? (
           <WelcomeScreen />
         ) : (

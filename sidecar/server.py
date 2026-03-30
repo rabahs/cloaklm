@@ -98,3 +98,15 @@ async def process_document(
         if 'tmp_path' in locals() and tmp_path.exists():
             tmp_path.unlink()
         raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    import sys
+    
+    # Read port from arguments or default to 4321
+    port = 4321
+    if len(sys.argv) > 1 and sys.argv[1].isdigit():
+        port = int(sys.argv[1])
+        
+    print(f"Starting CloakLM Sidecar on port {port}...")
+    uvicorn.run(app, host="127.0.0.1", port=port)

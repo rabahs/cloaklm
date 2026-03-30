@@ -1,0 +1,15 @@
+# Required for CloakLM PDF Ingestion
+docling>=1.1.0
+
+# Required for CloakLM PII Anonymization (Local AI)
+gliner>=0.2.1
+torch>=2.0.0
+
+# Logging and formatting (optional but useful)
+rich
+
+# Local Server (Tauri Sidecar)
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.7.0
+python-multipart

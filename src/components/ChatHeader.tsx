@@ -12,11 +12,28 @@ interface ChatHeaderProps {
   onProviderChange: (provider: LLMProvider) => void;
   onOpenSettings: () => void;
   onNewChat: () => void;
+  availableProviders: LLMProvider[];
   hasApiKey: boolean;
   hasMessages: boolean;
 }
 
-export function ChatHeader({ provider, onProviderChange, onOpenSettings, onNewChat, hasApiKey, hasMessages }: ChatHeaderProps) {
+export function ChatHeader({ 
+  provider, 
+  onProviderChange, 
+  onOpenSettings, 
+  onNewChat, 
+  availableProviders,
+  hasApiKey, 
+  hasMessages 
+}: ChatHeaderProps) {
+  // Filter the list of providers based on what's available
+  // If nothing is available, we show all (at least so they can see what's there before setting up)
+  // or better, if nothing is available, the list might be empty, but the user should see at least one
+  const filteredProviders = PROVIDERS.filter(p => availableProviders.includes(p.value));
+  
+  // Fallback: if no providers are available, show all but maybe they will be disabled or just show the current one
+  const displayProviders = filteredProviders.length > 0 ? filteredProviders : PROVIDERS;
+
   return (
     <header className="flex items-center justify-between px-5 py-3 border-b border-border bg-surface-elevated/80 backdrop-blur-sm"
       style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
@@ -51,7 +68,7 @@ export function ChatHeader({ provider, onProviderChange, onOpenSettings, onNewCh
             onChange={(e) => onProviderChange(e.target.value as LLMProvider)}
             className="bg-surface border border-border rounded-lg pl-3 pr-8 py-1.5 text-sm text-text-primary cursor-pointer outline-none focus:border-primary transition-colors appearance-none"
           >
-            {PROVIDERS.map((p) => (
+            {displayProviders.map((p) => (
               <option key={p.value} value={p.value}>
                 {p.icon} {p.label}
               </option>

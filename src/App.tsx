@@ -35,10 +35,41 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [engineStatus, setEngineStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [availableProviders, setAvailableProviders] = useState<LLMProvider[]>(["claude", "gemini", "openai", "ollama"]);
   const dragCounter = useRef(0);
 
   // Derive provider from settings
   const provider = settings.provider;
+  
+  const refreshAvailableProviders = useCallback(async (currentSettings: AppSettings) => {
+    const available: LLMProvider[] = [];
+    
+    // Check API keys
+    if (currentSettings.apiKeys.claude?.trim()) available.push("claude");
+    if (currentSettings.apiKeys.gemini?.trim()) available.push("gemini");
+    if (currentSettings.apiKeys.openai?.trim()) available.push("openai");
+    
+    // Check Ollama
+    try {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 1000); // 1s timeout for local check
+      const res = await fetch(`${currentSettings.ollamaUrl}/api/tags`, { signal: controller.signal });
+      clearTimeout(id);
+      if (res.ok) {
+        available.push("ollama");
+      }
+    } catch (e) {
+      // Ollama not reachable
+    }
+
+    setAvailableProviders(available);
+    
+    // If current provider is no longer available, switch to first available
+    if (available.length > 0 && !available.includes(currentSettings.provider)) {
+      setSettings(prev => ({ ...prev, provider: available[0] }));
+    }
+  }, []);
+
   const setProvider = useCallback((p: LLMProvider) => {
     setSettings((prev) => {
       const next = { ...prev, provider: p };
@@ -50,7 +81,8 @@ function App() {
   const handleSaveSettings = useCallback((newSettings: AppSettings) => {
     setSettings(newSettings);
     localStorage.setItem("cloaklm_settings", JSON.stringify(newSettings));
-  }, []);
+    refreshAvailableProviders(newSettings);
+  }, [refreshAvailableProviders]);
 
   // Check if current provider has an API key
   const hasApiKey = provider === "ollama" || !!settings.apiKeys[provider as keyof typeof settings.apiKeys]?.trim();
@@ -168,9 +200,10 @@ function App() {
     };
 
     checkHealth();
+    refreshAvailableProviders(settings);
     interval = window.setInterval(checkHealth, 2000);
     return () => clearInterval(interval);
-  }, []);
+  }, [refreshAvailableProviders, settings]);
 
   // Handle native Tauri OS Drag & Drop
   useEffect(() => {
@@ -323,6 +356,7 @@ function App() {
         onNewChat={() => { setMessages([]); setAttachments([]); }}
         hasApiKey={hasApiKey}
         hasMessages={messages.length > 0}
+        availableProviders={availableProviders}
       />
 
       <main className="flex-1 overflow-hidden flex flex-col relative">
@@ -367,6 +401,7 @@ function App() {
           settings={settings}
           onSave={handleSaveSettings}
           onClose={() => setShowSettings(false)}
+          isOllamaAvailable={availableProviders.includes("ollama")}
         />
       )}
     </div>

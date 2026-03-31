@@ -5,6 +5,7 @@ interface SettingsModalProps {
   settings: AppSettings;
   onSave: (settings: AppSettings) => void;
   onClose: () => void;
+  isOllamaAvailable: boolean;
 }
 
 const PROVIDERS: {
@@ -49,7 +50,7 @@ const PROVIDERS: {
   },
 ];
 
-export function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
+export function SettingsModal({ settings, onSave, onClose, isOllamaAvailable }: SettingsModalProps) {
   const [draft, setDraft] = useState<AppSettings>({ ...settings });
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
 
@@ -70,7 +71,7 @@ export function SettingsModal({ settings, onSave, onClose }: SettingsModalProps)
   };
 
   const isKeySet = (provider: LLMProvider) => {
-    if (provider === "ollama") return true;
+    if (provider === "ollama") return isOllamaAvailable;
     return !!draft.apiKeys[provider as keyof typeof draft.apiKeys]?.trim();
   };
 

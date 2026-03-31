@@ -5,7 +5,14 @@ fn greet(name: &str) -> String {
 }
 
 use tauri_plugin_shell::ShellExt;
-use tauri_plugin_shell::process::CommandEvent;
+use tauri_plugin_shell::process::{CommandEvent, CommandChild};
+use tauri::Manager;
+use tauri::RunEvent;
+use std::sync::Mutex;
+
+struct AppState {
+    sidecar_child: Mutex<Option<CommandChild>>,
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -16,9 +23,13 @@ pub fn run() {
             let sidecar_command = app.shell().sidecar("cloaklm-sidecar")
                 .expect("Failed to create sidecar command");
                 
-            let (mut rx, mut _child) = sidecar_command
+            let (mut rx, mut child) = sidecar_command
                 .spawn()
                 .expect("Failed to spawn sidecar");
+
+            app.manage(AppState {
+                sidecar_child: Mutex::new(Some(child)),
+            });
 
             tauri::async_runtime::spawn(async move {
                 while let Some(event) = rx.recv().await {
@@ -33,6 +44,20 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![greet])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| match event {
+            RunEvent::ExitRequested { api: _, .. } | RunEvent::Exit => {
+                let child_to_kill = app_handle
+                    .state::<AppState>()
+                    .sidecar_child
+                    .lock()
+                    .unwrap()
+                    .take();
+                if let Some(mut child) = child_to_kill {
+                    let _ = child.kill();
+                }
+            }
+            _ => {}
+        });
 }

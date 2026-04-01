@@ -138,15 +138,8 @@ export function SettingsModal({ settings, onSave, onClose, isOllamaAvailable }: 
                       placeholder="http://localhost:11434"
                       className="flex-1 bg-surface-elevated border border-border rounded-lg px-3 py-2 text-xs font-mono text-text-primary placeholder:text-text-muted outline-none focus:border-primary transition-colors"
                     />
-                    <input
-                      type="text"
-                      value={draft.ollamaModel}
-                      onChange={(e) => setDraft((d) => ({ ...d, ollamaModel: e.target.value }))}
-                      placeholder="llama3"
-                      className="w-28 bg-surface-elevated border border-border rounded-lg px-3 py-2 text-xs font-mono text-text-primary placeholder:text-text-muted outline-none focus:border-primary transition-colors"
-                    />
                   </div>
-                  <p className="text-[10px] text-text-muted">Server URL + Model name</p>
+                  <p className="text-[10px] text-text-muted">Server URL (Select Model in Chat Header)</p>
                 </div>
               ) : (
                 <div className="relative">

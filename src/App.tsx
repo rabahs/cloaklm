@@ -14,7 +14,15 @@ const DEFAULT_SETTINGS: AppSettings = {
   provider: "claude",
   apiKeys: {},
   ollamaUrl: "http://localhost:11434",
-  ollamaModel: "llama3.2",
+  activeModels: {
+    claude: "claude-3-5-sonnet-latest",
+    gemini: "gemini-3.1-pro",
+    openai: "gpt-5.4-thinking",
+    ollama: "llama3.2"
+  },
+  customModels: {
+    claude: [], gemini: [], openai: [], ollama: []
+  }
 };
 
 // Load settings from localStorage
@@ -70,9 +78,43 @@ function App() {
     }
   }, []);
 
-  const setProvider = useCallback((p: LLMProvider) => {
+
+
+  const handleSelectModel = useCallback((p: LLMProvider, modelId: string) => {
     setSettings((prev) => {
-      const next = { ...prev, provider: p };
+      const baseActive = prev.activeModels || {
+        claude: "claude-opus-4-6",
+        gemini: "gemini-3.1-pro",
+        openai: "gpt-5.4-thinking",
+        ollama: "llama3.2"
+      };
+      const next = {
+        ...prev,
+        provider: p,
+        activeModels: { ...baseActive, [p]: modelId }
+      };
+      localStorage.setItem("cloaklm_settings", JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const addCustomModel = useCallback((prov: LLMProvider, modelId: string) => {
+    setSettings((prev) => {
+      const baseCustom = prev.customModels || { claude: [], gemini: [], openai: [], ollama: [] };
+      const baseActive = prev.activeModels || {
+        claude: "claude-opus-4-6", gemini: "gemini-3.1-pro", openai: "gpt-5.4-thinking", ollama: "llama3.2"
+      };
+
+      const next = {
+        ...prev,
+        provider: prov,
+        customModels: {
+          ...baseCustom,
+          [prov]: [...(baseCustom[prov] || []), modelId]
+        }
+      };
+      // Auto-switch to the newly added custom model
+      next.activeModels = { ...baseActive, [prov]: modelId };
       localStorage.setItem("cloaklm_settings", JSON.stringify(next));
       return next;
     });
@@ -309,7 +351,7 @@ function App() {
           provider,
           apiKeys: settings.apiKeys,
           ollamaUrl: settings.ollamaUrl,
-          ollamaModel: settings.ollamaModel,
+          activeModel: settings.activeModels?.[provider] || "unknown",
           messages: conversationHistory,
           attachments: allAttachments,
         });
@@ -323,6 +365,7 @@ function App() {
           content: deAnonymizedResponse,
           timestamp: new Date(),
           provider,
+          modelId: settings.activeModels?.[provider] || "unknown",
         };
         setMessages((prev) => [...prev, aiMessage]);
       } catch (error) {
@@ -332,6 +375,7 @@ function App() {
           content: `⚠️ ${error instanceof Error ? error.message : "Failed to get response. Check your API key in Settings."}`,
           timestamp: new Date(),
           provider,
+          modelId: settings.activeModels?.[provider] || "unknown",
         };
         setMessages((prev) => [...prev, errorMessage]);
       } finally {
@@ -350,13 +394,10 @@ function App() {
       onDrop={handleDrop}
     >
       <ChatHeader
-        provider={provider}
-        onProviderChange={setProvider}
         onOpenSettings={() => setShowSettings(true)}
         onNewChat={() => { setMessages([]); setAttachments([]); }}
         hasApiKey={hasApiKey}
         hasMessages={messages.length > 0}
-        availableProviders={availableProviders}
       />
 
       <main className="flex-1 overflow-hidden flex flex-col relative">
@@ -384,6 +425,13 @@ function App() {
         onReviewAttachment={setReviewingAttachment}
         onAttachFiles={handleFiles}
         isLoading={isLoading}
+        provider={provider}
+        activeModel={settings.activeModels?.[provider] || ""}
+        onSelectModel={handleSelectModel}
+        apiKeys={settings.apiKeys}
+        ollamaUrl={settings.ollamaUrl}
+        customModels={settings.customModels || {}}
+        onAddCustomModel={addCustomModel}
       />
 
       {isDragging && <DropOverlay />}

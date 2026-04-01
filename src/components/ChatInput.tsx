@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import type { Attachment } from "../types";
+import type { Attachment, LLMProvider } from "../types";
 import { AttachmentChip } from "./AttachmentChip";
+import { UnifiedModelSelector } from "./UnifiedModelSelector";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -9,6 +10,15 @@ interface ChatInputProps {
   onReviewAttachment: (attachment: Attachment) => void;
   onAttachFiles?: (files: File[]) => void;
   isLoading: boolean;
+  
+  // Model Selector Props
+  provider: LLMProvider;
+  activeModel: string;
+  onSelectModel: (provider: LLMProvider, modelId: string) => void;
+  apiKeys: { claude?: string; gemini?: string; openai?: string };
+  ollamaUrl: string;
+  customModels: Record<string, string[]>;
+  onAddCustomModel: (provider: LLMProvider, modelId: string) => void;
 }
 
 export function ChatInput({
@@ -18,6 +28,13 @@ export function ChatInput({
   onReviewAttachment,
   onAttachFiles,
   isLoading,
+  provider,
+  activeModel,
+  onSelectModel,
+  apiKeys,
+  ollamaUrl,
+  customModels,
+  onAddCustomModel
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -121,10 +138,25 @@ export function ChatInput({
             </button>
           </div>
         </div>
-        <div className="text-center mt-2 px-2">
-           <span className="text-[11px] text-text-muted">
-            <span className="text-primary font-bold">CloakLM Shield Active.</span> Drop PDFs to anonymize locally before sending to AI.
-           </span>
+        <div className="flex items-center justify-between mt-2 px-2">
+          {/* Action Bar Left */}
+          <div className="flex items-center gap-2">
+            <UnifiedModelSelector
+              provider={provider}
+              activeModel={activeModel}
+              onSelect={onSelectModel}
+              apiKeys={apiKeys}
+              ollamaUrl={ollamaUrl}
+              customModels={customModels}
+              onAddCustomModel={onAddCustomModel}
+              isDisabled={isLoading}
+            />
+          </div>
+
+          {/* Action Bar Right */}
+          <span className="text-[11px] text-text-muted text-right">
+            <span className="text-primary font-bold">CloakLM Shield Active.</span> Drop PDFs to anonymize locally.
+          </span>
         </div>
       </div>
     </div>

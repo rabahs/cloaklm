@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CloakLM - Bring Your Own Key Privacy AI</title>
+    <meta name="description" content="CloakLM is a native macOS application that safely anonymizes your PDF documents locally using GLiNER before sending them to your favorite LLM.">
+    
+    <!-- Google Fonts for Modern Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Dynamic Background Elements -->
+    <div class="glow-orb orb-1"></div>
+    <div class="glow-orb orb-2"></div>
+    <div class="glow-orb orb-3"></div>
+
+    <nav class="navbar">
+        <div class="logo">
+            <img src="assets/logo.png" alt="CloakLM Logo" class="icon-img"> CloakLM
+        </div>
+        <div class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#how-it-works">How It Works</a>
+            <a href="https://github.com/rabahs/cloaklm" class="btn btn-outline" target="_blank">View on GitHub</a>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="hero-content">
+            <div class="badge">v0.1.0 Now Live</div>
+            <h1>Your Documents. <br><span class="gradient-text">Zero Compromise.</span></h1>
+            <p>CloakLM is a lightning-fast native macOS desktop app that automatically redacts highly sensitive PII from your PDFs locally <em>before</em> they ever touch the cloud LLMs.</p>
+            <div class="cta-group">
+                <a href="#download" class="btn btn-primary">Download for macOS</a>
+                <a href="#features" class="btn btn-secondary">Explore Features</a>
+            </div>
+        </div>
+
+        <div class="hero-image-wrapper">
+            <div class="glass-frame">
+                <!-- Our dynamically captured app screenshot -->
+                <img src="assets/app_demo.png" alt="CloakLM Application Interface Demo" class="app-mockup">
+            </div>
+        </div>
+    </header>
+
+    <section id="features" class="features-section">
+        <div class="section-title">
+            <h2>Why Use CloakLM?</h2>
+            <p>A suite of advanced privacy features designed for enterprise-grade data security.</p>
+        </div>
+
+        <div class="feature-grid">
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🧠</div>
+                <h3>Local AI Engine</h3>
+                <p>We bundle IBM Docling and the cutting-edge GLiNER AI directly into the app. Your data is scanned and redacted 100% locally on your computer.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🔑</div>
+                <h3>Bring Your Own Key</h3>
+                <p>Plug in your own API keys for Claude, Gemini, OpenAI, or connect directly to local Ollama models completely for free.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">📄</div>
+                <h3>Intelligent PDF Parsing</h3>
+                <p>Extracts deep layouts, tables, and complex formatting out of any PDF document seamlessly while maintaining context for the LLM.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🛡️</div>
+                <h3>Absolute Privacy</h3>
+                <p>Names, addresses, and organizations are swapped for `[PERSON_1]` or `[ORGANIZATION_1]`. The LLM's response is safely reconstituted back to the original entities on your end.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="how-it-works" class="features-section" style="padding-top: 0;">
+        <div class="section-title">
+            <h2>How It Works</h2>
+            <p>Three simple steps to absolute data privacy.</p>
+        </div>
+
+        <div class="feature-grid" style="text-align: center;">
+            <div class="feature-card glass-panel">
+                <div class="feature-icon" style="font-size: 3rem; background: transparent; border: none; box-shadow: none;">1️⃣</div>
+                <h3>Drop a PDF</h3>
+                <p>Simply drag and drop any local document directly into the CloakLM window.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon" style="font-size: 3rem; background: transparent; border: none; box-shadow: none;">2️⃣</div>
+                <h3>Local Redaction</h3>
+                <p>Our secure on-device AI instantly scrubs the document of all sensitive PII offline.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon" style="font-size: 3rem; background: transparent; border: none; box-shadow: none;">3️⃣</div>
+                <h3>Safe Analysis</h3>
+                <p>The safely anonymized text is analyzed by your chosen LLM, ensuring data stays private.</p>
+            </div>
+        </div>
+    </section>
+
+    <footer id="download">
+        <div class="footer-content glass-panel">
+            <h2>Ready to secure your workflow?</h2>
+            <p>Download the latest DMG release and start anonymizing documents today.</p>
+            <a href="https://github.com/rabahs/cloaklm/releases" class="btn btn-primary glow-btn">Download Release</a>
+        </div>
+        <div class="footer-bottom">
+            <p>© 2026 CloakLM. Open Source.</p>
+        </div>
+    </footer>
+
+    <!-- Simple interaction script -->
+    <script>
+        // Micro-interaction: Parallax effect on mouse move for the hero frame
+        document.addEventListener('mousemove', (e) => {
+            const frame = document.querySelector('.hero-image-wrapper');
+            const x = (window.innerWidth / 2 - e.pageX) / 50;
+            const y = (window.innerHeight / 2 - e.pageY) / 50;
+            if (frame) {
+                frame.style.transform = `rotateY(${x}deg) rotateX(${y}deg)`;
+            }
+        });
+    </script>
+</body>
+</html>

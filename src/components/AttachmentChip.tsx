@@ -22,7 +22,7 @@ export function AttachmentChip({
       <div className="flex items-center gap-1.5 bg-surface border border-primary/30 rounded-full px-2 py-0.5 text-xs">
         <span>📄</span>
         <span className="truncate max-w-[120px] font-medium">
-          {attachment.fileName}
+          {attachment.anonymizedFileName || attachment.fileName}
         </span>
       </div>
     );
@@ -56,7 +56,7 @@ export function AttachmentChip({
       {/* Details */}
       <div className="flex flex-col flex-1 min-w-0">
         <span className="font-semibold text-sm text-text-primary truncate">
-          {attachment.fileName}
+          {attachment.anonymizedFileName || attachment.fileName}
         </span>
         <span className="text-xs text-text-secondary mt-0.5">
           {isAnonymizing

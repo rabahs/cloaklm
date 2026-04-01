@@ -7,7 +7,7 @@ import { WelcomeScreen } from "./components/WelcomeScreen";
 import { ReviewPanel } from "./components/ReviewPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { listen } from "@tauri-apps/api/event";
-import { callLLM, deAnonymize } from "./llm";
+import { callLLM } from "./llm";
 import type { Message, Attachment, LLMProvider, AppSettings } from "./types";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -37,6 +37,7 @@ function loadSettings(): AppSettings {
 function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [historyAttachments, setHistoryAttachments] = useState<Record<string, Attachment>>({});
   const [reviewingAttachment, setReviewingAttachment] = useState<Attachment | null>(null);
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
   const [showSettings, setShowSettings] = useState(false);
@@ -192,19 +193,24 @@ function App() {
 
         const data = await response.json();
 
+        const updatedAttachment = {
+          ...attachment,
+          status: "ready" as const,
+          redactionCount: data.redaction_count,
+          anonymizedContent: data.anonymized_markdown,
+          anonymizedFileName: anonymizeString(fileName, data.redaction_map),
+          redactionMap: data.redaction_map,
+        };
+
         setAttachments((prev) =>
-          prev.map((a) =>
-            a.id === attachmentId
-              ? {
-                  ...a,
-                  status: "ready" as const,
-                  redactionCount: data.redaction_count,
-                  anonymizedContent: data.anonymized_markdown,
-                  redactionMap: data.redaction_map,
-                }
-              : a
-          )
+          prev.map((a) => (a.id === attachmentId ? updatedAttachment : a))
         );
+
+        // --- SSoT Fix: Register for history persistence ---
+        setHistoryAttachments((prev) => ({
+          ...prev,
+          [attachmentId]: updatedAttachment,
+        }));
       } catch (error) {
         setAttachments((prev) =>
           prev.map((a) =>
@@ -280,46 +286,88 @@ function App() {
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
+  const anonymizeString = (text: string, redactionMap: Record<string, import("./types").RedactionEntry> = {}) => {
+    let result = text;
+    for (const entry of Object.values(redactionMap)) {
+      // Small optimization: only replace if the real_value is more than 3 chars to avoid minor collisions
+      if (entry.real_value.length > 2) {
+        result = result.split(entry.real_value).join(entry.placeholder);
+      }
+    }
+    return result;
+  };
+
   const handleManualRedact = useCallback(
     (attachmentId: string, _selectedText: string, newContent: string, newEntry: import("./types").RedactionEntry) => {
       setAttachments((prev) =>
         prev.map((a) => {
           if (a.id !== attachmentId) return a;
           const key = `manual_${Date.now()}`;
+          const newMap = { ...a.redactionMap, [key]: newEntry };
           return {
             ...a,
             anonymizedContent: newContent,
+            anonymizedFileName: anonymizeString(a.fileName, newMap),
             redactionCount: (a.redactionCount || 0) + 1,
-            redactionMap: { ...a.redactionMap, [key]: newEntry },
+            redactionMap: newMap,
           };
         })
       );
       setReviewingAttachment((prev) => {
         if (!prev || prev.id !== attachmentId) return prev;
         const key = `manual_${Date.now()}`;
+        const newMap = { ...prev.redactionMap, [key]: newEntry };
         return {
           ...prev,
           anonymizedContent: newContent,
+          anonymizedFileName: anonymizeString(prev.fileName, newMap),
           redactionCount: (prev.redactionCount || 0) + 1,
-          redactionMap: { ...prev.redactionMap, [key]: newEntry },
+          redactionMap: newMap,
+        };
+      });
+
+      // --- SSoT Update: Sync to global history registry ---
+      setHistoryAttachments(prev => {
+        const current = prev[attachmentId];
+        if (!current) return prev;
+        const key = `manual_${Date.now()}`;
+        const newMap = { ...current.redactionMap, [key]: newEntry };
+        return {
+          ...prev,
+          [attachmentId]: {
+            ...current,
+            anonymizedContent: newContent,
+            anonymizedFileName: anonymizeString(current.fileName, newMap),
+            redactionCount: (current.redactionCount || 0) + 1,
+            redactionMap: newMap,
+          }
         };
       });
     },
-    []
+    [anonymizeString]
   );
 
   const sendMessage = useCallback(
     async (content: string) => {
       if (!content.trim() && attachments.length === 0) return;
 
-      const readyAttachments = attachments.filter((a) => a.status === "ready");
+      // --- CRITICAL STATE CAPTURE START ---
+      // We lock in the current state locally at the start to prevent race conditions 
+      // if the user clicks fast or if state is cleared during the process.
+      const currentTurnReady = attachments.filter((a) => a.status === "ready");
+      const currentHistoryMap = { ...historyAttachments };
+      
+      // Merge current turn files into history map for the complete current turn view
+      currentTurnReady.forEach(a => { currentHistoryMap[a.id] = a; });
+      const currentFullContext = Object.values(currentHistoryMap);
+      // --- CRITICAL STATE CAPTURE END ---
 
       const userMessage: Message = {
         id: crypto.randomUUID(),
         role: "user",
         content,
         timestamp: new Date(),
-        attachments: readyAttachments.length > 0 ? readyAttachments : undefined,
+        attachments: currentFullContext.length > 0 ? currentFullContext : undefined,
         provider,
       };
 
@@ -328,44 +376,23 @@ function App() {
       setIsLoading(true);
 
       try {
-        // Collect ALL attachments from the entire conversation (not just this turn)
-        const allAttachments: Attachment[] = [];
-        const seenIds = new Set<string>();
-        for (const msg of [...messages, userMessage]) {
-          for (const att of msg.attachments || []) {
-            if (!seenIds.has(att.id)) {
-              seenIds.add(att.id);
-              allAttachments.push(att);
-            }
-          }
-        }
-
-        // Build conversation history for the LLM
-        const conversationHistory = [...messages, userMessage].map((m) => ({
-          role: m.role,
-          content: m.content,
-        }));
-
-        // Call the actual LLM API — all conversation attachments are included in the system prompt
         const rawResponse = await callLLM({
           provider,
           apiKeys: settings.apiKeys,
           ollamaUrl: settings.ollamaUrl,
           activeModel: settings.activeModels?.[provider] || "unknown",
-          messages: conversationHistory,
-          attachments: allAttachments,
+          messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
+          attachments: currentFullContext,
         });
-
-        // De-anonymize: replace [PERSON_1] with real names for the user
-        const deAnonymizedResponse = deAnonymize(rawResponse, allAttachments);
 
         const aiMessage: Message = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: deAnonymizedResponse,
+          content: rawResponse,
           timestamp: new Date(),
           provider,
           modelId: settings.activeModels?.[provider] || "unknown",
+          attachments: currentFullContext, // Keep for UI de-anonymization
         };
         setMessages((prev) => [...prev, aiMessage]);
       } catch (error) {
@@ -382,7 +409,7 @@ function App() {
         setIsLoading(false);
       }
     },
-    [attachments, messages, provider, settings]
+    [attachments, historyAttachments, messages, provider, settings]
   );
 
   return (
@@ -404,6 +431,24 @@ function App() {
         {engineStatus === 'loading' && (
           <div className="absolute top-0 left-0 right-0 bg-primary/10 border-b border-primary/20 p-2 text-center text-sm text-primary animate-pulse z-10">
             🛡️ CloakLM Shield is initializing AI models... (30-40 seconds)
+          </div>
+        )}
+        {isLoading && (
+          <div className="p-4 flex items-center justify-center gap-3 text-text-muted animate-pulse border-t border-border bg-surface/50">
+            <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]" />
+            <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]" />
+            <div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
+            <span className="text-xs font-medium ml-2">CloakLM is thinking...</span>
+            <div className="flex items-center gap-2 ml-4">
+              <span className="text-[10px] uppercase tracking-widest bg-success/10 text-success px-2 py-0.5 rounded-full border border-success/20 font-bold">
+                🛡️ Sentinel Firewall
+              </span>
+              {Object.keys(historyAttachments).length > 0 && (
+                <span className="text-[10px] uppercase tracking-widest bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20 font-bold animate-pulse">
+                   📄 {Object.keys(historyAttachments).length} Docs Indexed
+                </span>
+              )}
+            </div>
           </div>
         )}
         {engineStatus === 'error' && (

@@ -20,26 +20,35 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let sidecar_command = app.shell().sidecar("cloaklm-sidecar")
-                .expect("Failed to create sidecar command");
-                
-            let (mut rx, mut child) = sidecar_command
-                .spawn()
-                .expect("Failed to spawn sidecar");
+            let sidecar_command = app.shell().sidecar("cloaklm-sidecar");
+            
+            if let Ok(cmd) = sidecar_command {
+                if let Ok((mut rx, child)) = cmd.spawn() {
+                    app.manage(AppState {
+                        sidecar_child: Mutex::new(Some(child)),
+                    });
 
-            app.manage(AppState {
-                sidecar_child: Mutex::new(Some(child)),
-            });
-
-            tauri::async_runtime::spawn(async move {
-                while let Some(event) = rx.recv().await {
-                    if let CommandEvent::Stdout(line) = event {
-                        println!("sidecar out: {}", String::from_utf8_lossy(&line));
-                    } else if let CommandEvent::Stderr(line) = event {
-                        eprintln!("sidecar err: {}", String::from_utf8_lossy(&line));
-                    }
+                    tauri::async_runtime::spawn(async move {
+                        while let Some(event) = rx.recv().await {
+                            if let CommandEvent::Stdout(line) = event {
+                                println!("sidecar out: {}", String::from_utf8_lossy(&line));
+                            } else if let CommandEvent::Stderr(line) = event {
+                                eprintln!("sidecar err: {}", String::from_utf8_lossy(&line));
+                            }
+                        }
+                    });
+                } else {
+                    eprintln!("Failed to spawn sidecar. Running in UI-only mode.");
+                    app.manage(AppState {
+                        sidecar_child: Mutex::new(None),
+                    });
                 }
-            });
+            } else {
+                eprintln!("Sidecar command 'cloaklm-sidecar' not found in configuration. Running in UI-only mode.");
+                app.manage(AppState {
+                    sidecar_child: Mutex::new(None),
+                });
+            }
             
             Ok(())
         })

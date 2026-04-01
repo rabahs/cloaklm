@@ -5,6 +5,7 @@ export interface Message {
   timestamp: Date;
   attachments?: Attachment[];
   provider?: LLMProvider;
+  modelId?: string;
 }
 
 export interface Attachment {
@@ -34,5 +35,6 @@ export interface AppSettings {
     openai?: string;
   };
   ollamaUrl: string;
-  ollamaModel: string;
+  activeModels?: Record<LLMProvider, string>;
+  customModels?: Record<LLMProvider, string[]>;
 }

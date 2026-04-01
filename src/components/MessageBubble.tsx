@@ -34,7 +34,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {!isUser && message.provider && (
           <div className="flex items-center gap-1.5 mb-1">
             <span className="text-[10px] font-bold text-text-muted bg-surface-elevated border border-border px-2 py-0.5 rounded-full">
-              {getProviderDisplayName(message.provider)}
+              {message.modelId ? message.modelId : getProviderDisplayName(message.provider)}
             </span>
           </div>
         )}

@@ -89,8 +89,28 @@ export function deAnonymize(
 
 // ---------- Provider-specific API callers ----------
 
+async function parseLLMError(providerName: string, response: Response): Promise<Error> {
+  let rawText = "";
+  try { rawText = await response.text(); } catch { return new Error(`${providerName} Error: ${response.status}`); }
+
+  let json: any = null;
+  try { json = JSON.parse(rawText); } catch { /* Ignore */ }
+
+  const errorMsg = json?.error?.message || json?.message || json?.error || rawText.substring(0, 150) || "Unknown error";
+  
+  const status = response.status;
+  const isRateLimit = status === 429 || String(errorMsg).toLowerCase().includes("quota") || String(errorMsg).toLowerCase().includes("rate limit");
+  const isAuth = status === 401 || status === 403;
+
+  if (isRateLimit) return new Error(`You have exceeded your ${providerName} API rate limit or billing quota. Please check your provider account.`);
+  if (isAuth) return new Error(`Invalid ${providerName} API key. Please double-check your Settings.`);
+  
+  return new Error(`${providerName} API Error (${status}): ${typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg).substring(0, 100)}`);
+}
+
 async function callClaude(
   apiKey: string,
+  modelId: string,
   messages: { role: string; content: string }[],
   systemPrompt: string
 ): Promise<string> {
@@ -105,7 +125,7 @@ async function callClaude(
       "anthropic-dangerous-direct-browser-access": "true",
     },
     body: JSON.stringify({
-      model: config.defaultModel,
+      model: modelId || config.defaultModel,
       max_tokens: 4096,
       system: systemPrompt,
       messages: messages.map((m) => ({
@@ -116,8 +136,7 @@ async function callClaude(
   });
 
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Claude API error: ${response.status} — ${err}`);
+    throw await parseLLMError("Claude", response);
   }
 
   const data = await response.json();
@@ -126,11 +145,12 @@ async function callClaude(
 
 async function callGemini(
   apiKey: string,
+  modelId: string,
   messages: { role: string; content: string }[],
   systemPrompt: string
 ): Promise<string> {
   const config = PROVIDER_CONFIG.gemini;
-  const url = `${config.url}/${config.defaultModel}:generateContent?key=${apiKey}`;
+  const url = `${config.url}/${modelId || config.defaultModel}:generateContent?key=${apiKey}`;
 
   const contents = messages.map((m) => ({
     role: m.role === "user" ? "user" : "model",
@@ -147,8 +167,7 @@ async function callGemini(
   });
 
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Gemini API error: ${response.status} — ${err}`);
+    throw await parseLLMError("Gemini", response);
   }
 
   const data = await response.json();
@@ -157,6 +176,7 @@ async function callGemini(
 
 async function callOpenAI(
   apiKey: string,
+  modelId: string,
   messages: { role: string; content: string }[],
   systemPrompt: string
 ): Promise<string> {
@@ -177,15 +197,14 @@ async function callOpenAI(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: config.defaultModel,
+      model: modelId || config.defaultModel,
       messages: apiMessages,
       max_tokens: 4096,
     }),
   });
 
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`OpenAI API error: ${response.status} — ${err}`);
+    throw await parseLLMError("OpenAI", response);
   }
 
   const data = await response.json();
@@ -217,8 +236,7 @@ async function callOllama(
   });
 
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Ollama error: ${response.status} — ${err}`);
+    throw await parseLLMError("Ollama", response);
   }
 
   const data = await response.json();
@@ -231,13 +249,13 @@ export interface LLMCallOptions {
   provider: LLMProvider;
   apiKeys: { claude?: string; gemini?: string; openai?: string };
   ollamaUrl: string;
-  ollamaModel: string;
+  activeModel: string;
   messages: { role: string; content: string }[];
   attachments: Attachment[];
 }
 
 export async function callLLM(options: LLMCallOptions): Promise<string> {
-  const { provider, apiKeys, ollamaUrl, ollamaModel, messages, attachments } =
+  const { provider, apiKeys, ollamaUrl, activeModel, messages, attachments } =
     options;
 
   const systemPrompt = buildSystemPrompt(attachments);
@@ -245,18 +263,18 @@ export async function callLLM(options: LLMCallOptions): Promise<string> {
   switch (provider) {
     case "claude": {
       if (!apiKeys.claude) throw new Error("Claude API key not configured. Open Settings (⚙️) to add it.");
-      return callClaude(apiKeys.claude, messages, systemPrompt);
+      return callClaude(apiKeys.claude, activeModel, messages, systemPrompt);
     }
     case "gemini": {
       if (!apiKeys.gemini) throw new Error("Gemini API key not configured. Open Settings (⚙️) to add it.");
-      return callGemini(apiKeys.gemini, messages, systemPrompt);
+      return callGemini(apiKeys.gemini, activeModel, messages, systemPrompt);
     }
     case "openai": {
       if (!apiKeys.openai) throw new Error("OpenAI API key not configured. Open Settings (⚙️) to add it.");
-      return callOpenAI(apiKeys.openai, messages, systemPrompt);
+      return callOpenAI(apiKeys.openai, activeModel, messages, systemPrompt);
     }
     case "ollama": {
-      return callOllama(messages, systemPrompt, ollamaUrl, ollamaModel);
+      return callOllama(messages, systemPrompt, ollamaUrl, activeModel);
     }
     default:
       throw new Error(`Unknown provider: ${provider}`);

@@ -84,6 +84,10 @@ cloaklm/
 > For architecture details, design decisions, and security model, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 > For the roadmap and milestone tracking, see [MILESTONES.md](./MILESTONES.md).
 
+## Contact
+
+Rabah Shihab - [@rabahs](https://github.com/rabahs)
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).

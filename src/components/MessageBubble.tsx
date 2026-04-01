@@ -1,6 +1,6 @@
 import type { Message } from "../types";
 import { AttachmentChip } from "./AttachmentChip";
-import { getProviderDisplayName, getProviderIcon } from "../llm";
+import { deAnonymize, getProviderDisplayName, getProviderIcon } from "../llm";
 
 interface MessageBubbleProps {
   message: Message;
@@ -8,6 +8,7 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user";
+  const displayContent = deAnonymize(message.content, message.attachments || []);
 
   return (
     <div
@@ -49,7 +50,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         )}
 
         {/* Text bubble */}
-        {message.content && (
+        {displayContent && (
           <div
             className={`rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
               isUser
@@ -57,7 +58,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                 : "bg-surface-elevated border border-border text-text-primary rounded-tl-sm"
             }`}
           >
-            {message.content}
+            {displayContent}
           </div>
         )}
 

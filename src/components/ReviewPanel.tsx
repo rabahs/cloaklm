@@ -15,6 +15,8 @@ interface FloatingButton {
 
 export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanelProps) {
   const [viewMode, setViewMode] = useState<"list" | "raw">("list");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [copied, setCopied] = useState(false);
   const [floatingBtn, setFloatingBtn] = useState<FloatingButton | null>(null);
   const rawContentRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -24,6 +26,14 @@ export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanel
 
   // Count how many manual redactions already exist
   const manualCount = entries.filter(e => e.category === "manual").length;
+
+  const handleCopy = useCallback(() => {
+    if (!attachment.anonymizedContent) return;
+    navigator.clipboard.writeText(attachment.anonymizedContent).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [attachment.anonymizedContent]);
 
   const handleTextSelection = useCallback(() => {
     const selection = window.getSelection();
@@ -104,13 +114,25 @@ export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanel
     if (!text) return "No content generated.";
 
     const placeholders = entries.map(e => e.placeholder);
-    if (placeholders.length === 0) return text;
-
+    
+    // Create combined regex for placeholders and search query
     const escapedPlaceholders = placeholders.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    const regex = new RegExp(`(${escapedPlaceholders.join('|')})`, 'g');
+    let regexParts = [...escapedPlaceholders];
+    
+    if (searchQuery.trim().length >= 2) {
+      regexParts.push(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    }
+
+    if (regexParts.length === 0) return text;
+
+    const regex = new RegExp(`(${regexParts.join('|')})`, 'gi');
     const parts = text.split(regex);
 
     return parts.map((part, i) => {
+      const lowerPart = part.toLowerCase();
+      const lowerSearch = searchQuery.toLowerCase();
+      
+      // Match placeholders (case sensitive)
       if (placeholders.includes(part)) {
         const isManual = part.startsWith("[MANUAL_");
         return (
@@ -126,6 +148,19 @@ export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanel
           </span>
         );
       }
+      
+      // Match search query (case insensitive)
+      if (searchQuery.trim().length >= 2 && lowerPart === lowerSearch) {
+        return (
+          <mark
+            key={i}
+            className="bg-yellow-400/40 text-white rounded px-0.5"
+          >
+            {part}
+          </mark>
+        );
+      }
+      
       return <span key={i}>{part}</span>;
     });
   };
@@ -161,7 +196,7 @@ export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanel
           <div>
             <h2 className="text-lg font-semibold text-text-primary">Redaction Review</h2>
             <p className="text-xs text-text-secondary mt-1 max-w-[300px] truncate">
-              {attachment.fileName}
+              {attachment.anonymizedFileName || attachment.fileName}
             </p>
           </div>
           <button
@@ -241,12 +276,28 @@ export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanel
               )}
             </div>
           ) : (
-            <div className="flex-1 bg-surface border border-border rounded-lg overflow-hidden flex flex-col">
-              <div className="bg-surface-elevated border-b border-border px-3 py-2 flex items-center justify-between">
-                <span className="text-xs font-mono text-text-muted">anonymized_output.md</span>
-                <span className="text-[10px] text-text-muted bg-surface-hover px-2 py-0.5 rounded-full">
-                  💡 Select text to redact
-                </span>
+            <div className="flex-1 bg-surface border border-border rounded-lg overflow-hidden flex flex-col min-h-0">
+              <div className="bg-surface-elevated border-b border-border px-3 py-2 flex items-center justify-between gap-4">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search in text..."
+                    className="w-full bg-surface border border-border rounded-md px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-primary transition-colors pl-7"
+                  />
+                  <span className="absolute left-2.5 top-1.5 text-text-muted text-[10px]">🔍</span>
+                </div>
+                <button
+                  onClick={handleCopy}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold transition-all ${
+                    copied 
+                      ? "bg-success text-white shadow-success/20" 
+                      : "bg-surface hover:bg-surface-hover text-text-secondary border border-border"
+                  }`}
+                >
+                  {copied ? "✅ Copied" : "📋 Copy All"}
+                </button>
               </div>
               <div ref={rawContentRef} className="flex-1 overflow-auto p-4 select-text cursor-text">
                 <pre className="text-xs font-mono text-text-secondary whitespace-pre-wrap leading-relaxed">

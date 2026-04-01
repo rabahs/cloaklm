@@ -11,6 +11,7 @@ export interface Message {
 export interface Attachment {
   id: string;
   fileName: string;
+  anonymizedFileName?: string;
   originalPath: string;
   status: "anonymizing" | "ready" | "error";
   redactionCount?: number;

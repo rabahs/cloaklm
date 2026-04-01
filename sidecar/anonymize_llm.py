@@ -240,6 +240,49 @@ class GLiNERAnonymizer:
         text = re.sub(r'\b[Xx]{3,}[-\s]?\d{4}\b', _acct, text)
         text = re.sub(r'\*{3,}\d{4}\b', _acct, text)
 
+        # --- FINAL GLOBAL REDACTION PASS ---
+        # Ensure any PII caught anywhere is redacted EVERYWHERE else, 
+        # protecting against chunking misses.
+        text = self._global_redact_pass(text)
+
+        return text
+
+    def _global_redact_pass(self, text: str) -> str:
+        """Final recursive sweep to ensure consistency and fragment protection."""
+        if not self.redaction_map:
+            return text
+
+        # 1. Expand the list to include fragments (Recursive Redaction)
+        # If "John Doe" is PII, then "John" and "Doe" must also be PII.
+        all_tokens = []
+        for entry in self.redaction_map.values():
+            real_val = entry["real_value"]
+            placeholder = entry["placeholder"]
+            all_tokens.append((real_val, placeholder))
+            
+            # Add name fragments (only for multi-word strings)
+            parts = real_val.split()
+            if len(parts) > 1:
+                category = entry.get("category", "").lower()
+                # Especially for names and organizations, fragments are dangerous
+                if "person" in category or "organization" in category or "org" in category:
+                    for part in parts:
+                        if len(part) > 2: # Ignore initials/short words
+                            all_tokens.append((part, placeholder))
+
+        # 2. Sort by length (longest values first) to prevent partial replacements
+        all_tokens = sorted(
+            all_tokens, 
+            key=lambda x: len(x[0]), 
+            reverse=True
+        )
+
+        # 3. Perform the sweep
+        for real_val, placeholder in all_tokens:
+            if len(real_val) < 2: continue
+            pattern = re.compile(re.escape(real_val), re.IGNORECASE)
+            text = pattern.sub(placeholder, text)
+
         return text
 
 

@@ -2,8 +2,8 @@ export function WelcomeScreen() {
   return (
     <div className="flex-1 flex items-center justify-center p-8">
       <div className="max-w-lg text-center">
-        <div className="w-20 h-20 rounded-2xl bg-primary/15 flex items-center justify-center mx-auto mb-6">
-          <span className="text-4xl">🛡️</span>
+        <div className="w-20 h-20 rounded-2xl bg-surface-elevated/50 flex items-center justify-center mx-auto mb-6 shadow-sm border border-border overflow-hidden">
+          <img src="/logo.png" alt="CloakLM Logo" className="w-full h-full object-cover" />
         </div>
 
         <h2 className="text-2xl font-bold text-text-primary mb-3">

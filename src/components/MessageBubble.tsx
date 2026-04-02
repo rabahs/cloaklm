@@ -68,7 +68,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             isUser ? "text-right" : ""
           }`}
         >
-          {message.timestamp.toLocaleTimeString([], {
+          {new Date(message.timestamp).toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
           })}

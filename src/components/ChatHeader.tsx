@@ -5,13 +5,15 @@ interface ChatHeaderProps {
   onNewChat: () => void;
   hasApiKey: boolean;
   hasMessages: boolean;
+  onOpenHistory: () => void;
 }
 
 export function ChatHeader({ 
   onOpenSettings, 
   onNewChat, 
   hasApiKey, 
-  hasMessages 
+  hasMessages,
+  onOpenHistory
 }: ChatHeaderProps) {
 
 
@@ -20,8 +22,8 @@ export function ChatHeader({
       style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
     >
       <div className="flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-          <span className="text-lg">🛡️</span>
+        <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shadow-sm">
+          <img src="/logo.png" alt="CloakLM Map Logo" className="w-full h-full object-cover" />
         </div>
         <h1 className="text-base font-semibold text-text-primary tracking-tight">
           CloakLM
@@ -42,6 +44,14 @@ export function ChatHeader({
             ✨ New Chat
           </button>
         )}
+
+        <button
+          onClick={onOpenHistory}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-border rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:border-primary/50 transition-all"
+          title="View Past Conversations"
+        >
+          🕰️ History
+        </button>
 
 
         <button

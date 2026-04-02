@@ -1,0 +1,3 @@
+#!/bin/bash
+# Local development wrapper for the cloaklm-sidecar
+python3 "${BASH_SOURCE[0]%/*}/../sidecar/server.py" "$@"

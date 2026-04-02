@@ -8,7 +8,9 @@ import { ReviewPanel } from "./components/ReviewPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { listen } from "@tauri-apps/api/event";
 import { callLLM } from "./llm";
-import type { Message, Attachment, LLMProvider, AppSettings } from "./types";
+import type { Message, Attachment, LLMProvider, AppSettings, ChatSession } from "./types";
+import { loadSettingsStore, saveSettingsStore, loadChatSessions, saveChatSessions } from "./store";
+import { HistoryModal } from "./components/HistoryModal";
 
 const DEFAULT_SETTINGS: AppSettings = {
   provider: "claude",
@@ -25,27 +27,30 @@ const DEFAULT_SETTINGS: AppSettings = {
   }
 };
 
-// Load settings from localStorage
-function loadSettings(): AppSettings {
-  try {
-    const raw = localStorage.getItem("cloaklm_settings");
-    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
-  } catch {}
-  return DEFAULT_SETTINGS;
-}
-
 function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [historyAttachments, setHistoryAttachments] = useState<Record<string, Attachment>>({});
   const [reviewingAttachment, setReviewingAttachment] = useState<Attachment | null>(null);
-  const [settings, setSettings] = useState<AppSettings>(loadSettings);
+  
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
+  
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [engineStatus, setEngineStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [sidecarPort, setSidecarPort] = useState<number>(4321);
   const [availableProviders, setAvailableProviders] = useState<LLMProvider[]>(["claude", "gemini", "openai", "ollama"]);
   const dragCounter = useRef(0);
+
+  useEffect(() => {
+    loadSettingsStore(DEFAULT_SETTINGS).then(setSettings);
+    loadChatSessions().then(setChatSessions);
+  }, []);
 
   // Derive provider from settings
   const provider = settings.provider;
@@ -94,7 +99,7 @@ function App() {
         provider: p,
         activeModels: { ...baseActive, [p]: modelId }
       };
-      localStorage.setItem("cloaklm_settings", JSON.stringify(next));
+      saveSettingsStore(next);
       return next;
     });
   }, []);
@@ -116,14 +121,14 @@ function App() {
       };
       // Auto-switch to the newly added custom model
       next.activeModels = { ...baseActive, [prov]: modelId };
-      localStorage.setItem("cloaklm_settings", JSON.stringify(next));
+      saveSettingsStore(next);
       return next;
     });
   }, []);
 
   const handleSaveSettings = useCallback((newSettings: AppSettings) => {
     setSettings(newSettings);
-    localStorage.setItem("cloaklm_settings", JSON.stringify(newSettings));
+    saveSettingsStore(newSettings);
     refreshAvailableProviders(newSettings);
   }, [refreshAvailableProviders]);
 
@@ -181,7 +186,7 @@ function App() {
           formData.append("file", fileObj);
         }
 
-        const response = await fetch("http://127.0.0.1:4321/api/process", {
+        const response = await fetch(`http://127.0.0.1:${sidecarPort}/api/process`, {
           method: "POST",
           body: formData,
         });
@@ -231,9 +236,15 @@ function App() {
   useEffect(() => {
     let interval: number;
     let attempts = 0;
+    
+    const unlistenPromise = listen<number>("sidecar-ready", (event) => {
+      setSidecarPort(event.payload);
+      console.log(`🛡️ Sidecar connected on dynamic port: ${event.payload}`);
+    }).catch(() => null);
+
     const checkHealth = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:4321/health");
+        const res = await fetch(`http://127.0.0.1:${sidecarPort}/health`);
         if (res.ok) {
           setEngineStatus('ready');
           clearInterval(interval);
@@ -250,8 +261,11 @@ function App() {
     checkHealth();
     refreshAvailableProviders(settings);
     interval = window.setInterval(checkHealth, 2000);
-    return () => clearInterval(interval);
-  }, [refreshAvailableProviders, settings]);
+    return () => {
+      clearInterval(interval);
+      unlistenPromise.then(u => u && u());
+    };
+  }, [refreshAvailableProviders, settings, sidecarPort]);
 
   // Handle native Tauri OS Drag & Drop
   useEffect(() => {
@@ -404,13 +418,49 @@ function App() {
           provider,
           modelId: settings.activeModels?.[provider] || "unknown",
         };
-        setMessages((prev) => [...prev, errorMessage]);
+        const updatedMessages = [...messages, errorMessage];
+        setMessages(updatedMessages);
       } finally {
         setIsLoading(false);
       }
     },
-    [attachments, historyAttachments, messages, provider, settings]
+    [attachments, historyAttachments, messages, provider, settings, currentSessionId, chatSessions]
   );
+  
+  // Save chat session effect
+  useEffect(() => {
+    if (messages.length === 0) return;
+    
+    // Auto-save the current session
+    let sessionId = currentSessionId;
+    let title = messages.find(m => m.role === 'user')?.content.substring(0, 40) || 'New Conversation';
+    if (title.length >= 40) title += '...';
+    
+    if (!sessionId) {
+      sessionId = crypto.randomUUID();
+      setCurrentSessionId(sessionId);
+    }
+    
+    const updatedSessions = chatSessions.filter(s => s.id !== sessionId);
+    updatedSessions.unshift({
+      id: sessionId,
+      title,
+      updatedAt: new Date().toISOString(),
+      messages,
+      attachments: [], // Current attachments are transient
+      historyAttachments
+    });
+    
+    setChatSessions(updatedSessions);
+    saveChatSessions(updatedSessions);
+  }, [messages, historyAttachments]);
+
+  const handleNewChat = () => {
+    setMessages([]);
+    setAttachments([]);
+    setHistoryAttachments({});
+    setCurrentSessionId(null);
+  };
 
   return (
     <div
@@ -422,7 +472,8 @@ function App() {
     >
       <ChatHeader
         onOpenSettings={() => setShowSettings(true)}
-        onNewChat={() => { setMessages([]); setAttachments([]); }}
+        onOpenHistory={() => setShowHistory(true)}
+        onNewChat={handleNewChat}
         hasApiKey={hasApiKey}
         hasMessages={messages.length > 0}
       />
@@ -495,6 +546,27 @@ function App() {
           onSave={handleSaveSettings}
           onClose={() => setShowSettings(false)}
           isOllamaAvailable={availableProviders.includes("ollama")}
+        />
+      )}
+
+      {showHistory && (
+        <HistoryModal 
+          sessions={chatSessions}
+          currentSessionId={currentSessionId}
+          onClose={() => setShowHistory(false)}
+          onSelect={(session) => {
+            setMessages(session.messages);
+            setHistoryAttachments(session.historyAttachments || {});
+            setCurrentSessionId(session.id);
+            setAttachments([]); // Clear pending
+            setShowHistory(false);
+          }}
+          onDelete={(id) => {
+            const updated = chatSessions.filter(s => s.id !== id);
+            setChatSessions(updated);
+            saveChatSessions(updated);
+            if (currentSessionId === id) handleNewChat();
+          }}
         />
       )}
     </div>

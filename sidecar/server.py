@@ -70,7 +70,7 @@ async def process_document(
 
     try:
         # 1. Ingest (PDF -> Markdown)
-        print(f"Ingesting {filename}...")
+        print(f"Ingesting document of size {target_path.stat().st_size} bytes...")
         result = converter.convert(target_path)
         original_md = result.document.export_to_markdown()
 
@@ -102,11 +102,22 @@ async def process_document(
 if __name__ == "__main__":
     import uvicorn
     import sys
+    import socket
+    import logging
     
-    # Read port from arguments or default to 4321
-    port = 4321
-    if len(sys.argv) > 1 and sys.argv[1].isdigit():
-        port = int(sys.argv[1])
-        
-    print(f"Starting CloakLM Sidecar on port {port}...")
-    uvicorn.run(app, host="127.0.0.1", port=port)
+    # Disable Uvicorn default logging to avoid cluttering stdout 
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+    # Pick an available port dynamically
+    def get_free_port():
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(('127.0.0.1', 0))
+            return s.getsockname()[1]
+
+    port = get_free_port()
+    
+    # EMIT the strict structured log for Tauri to parse
+    print(f"CLOAKLM_PORT={port}", flush=True)
+    
+    # Run the server
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")

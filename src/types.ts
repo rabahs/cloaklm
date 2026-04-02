@@ -39,3 +39,12 @@ export interface AppSettings {
   activeModels?: Record<LLMProvider, string>;
   customModels?: Record<LLMProvider, string[]>;
 }
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  updatedAt: string;
+  messages: Message[];
+  attachments: Attachment[];
+  historyAttachments: Record<string, Attachment>;
+}

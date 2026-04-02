@@ -42,7 +42,16 @@ jobs:
           tagName: ${{ github.ref_name }} # the action automatically creates a release for this tag
           releaseName: 'CloakLM ${{ github.ref_name }}'
           releaseBody: |
-            This is a pre-release build of the User Interface. 
-            **Note:** This version requires the Python sidecar to be run manually from the terminal. 
+            ### CloakLM v0.3.0 — The Hardened Update
+            
+            This release brings major security and usability improvements:
+            
+            *   **🛡️ Secure Storage**: API keys are now stored in an encrypted local keystore rather than plain-text localStorage.
+            *   **🕰️ Chat History**: Your conversations are now automatically persisted locally and can be reloaded via the new History menu.
+            *   **✨ Unified Branding**: Integrated the official CloakLM logo across the application UI and OS icons.
+            *   **🔌 Dynamic Backend**: The Python sidecar now binds to dynamic ports and scrubs logs to ensure zero PII leakage during local processing.
+            *   **🐛 Fixed Bug**: Resolved an issue where reloading chat history caused a blank screen due to date parsing.
+            
+            **Note:** This version still requires the sidecar environment to be present.
           releaseDraft: false
           prerelease: false

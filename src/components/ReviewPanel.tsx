@@ -16,10 +16,12 @@ interface FloatingButton {
 export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanelProps) {
   const [viewMode, setViewMode] = useState<"list" | "raw">("list");
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
   const [copied, setCopied] = useState(false);
   const [floatingBtn, setFloatingBtn] = useState<FloatingButton | null>(null);
   const rawContentRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const matchRefs = useRef<(HTMLElement | null)[]>([]);
 
   const map = attachment.redactionMap || {};
   const entries = Object.values(map);
@@ -110,6 +112,38 @@ export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanel
     window.getSelection()?.removeAllRanges();
   }, [floatingBtn, attachment, manualCount, onManualRedact]);
 
+  const totalMatches = searchQuery.trim().length >= 2 
+    ? (attachment.anonymizedContent?.match(new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')) || []).length
+    : 0;
+
+  // Handle scrolling to current match
+  useEffect(() => {
+    if (viewMode === "raw" && matchRefs.current[currentSearchIndex]) {
+      matchRefs.current[currentSearchIndex]?.scrollIntoView({ 
+        behavior: "smooth", 
+        block: "center",
+        inline: "nearest"
+      });
+    }
+  }, [currentSearchIndex, viewMode]);
+
+  // Reset search index when query changes
+  useEffect(() => {
+    setCurrentSearchIndex(0);
+  }, [searchQuery]);
+
+  const handleNextMatch = useCallback(() => {
+    const total = totalMatches;
+    if (total === 0) return;
+    setCurrentSearchIndex((prev) => (prev + 1) % total);
+  }, [totalMatches]);
+
+  const handlePrevMatch = useCallback(() => {
+    const total = totalMatches;
+    if (total === 0) return;
+    setCurrentSearchIndex((prev) => (prev - 1 + total) % total);
+  }, [totalMatches]);
+
   const renderHighlightedText = (text: string | undefined) => {
     if (!text) return "No content generated.";
 
@@ -127,6 +161,10 @@ export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanel
 
     const regex = new RegExp(`(${regexParts.join('|')})`, 'gi');
     const parts = text.split(regex);
+    
+    let searchMatchCounter = 0;
+    // Reset match refs
+    matchRefs.current = [];
 
     return parts.map((part, i) => {
       const lowerPart = part.toLowerCase();
@@ -151,10 +189,17 @@ export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanel
       
       // Match search query (case insensitive)
       if (searchQuery.trim().length >= 2 && lowerPart === lowerSearch) {
+        const matchIdx = searchMatchCounter++;
+        const isCurrent = matchIdx === currentSearchIndex;
         return (
           <mark
             key={i}
-            className="bg-yellow-400/40 text-white rounded px-0.5"
+            ref={(el) => { matchRefs.current[matchIdx] = el; }}
+            className={`rounded px-1 py-0.5 transition-all duration-300 font-bold ${
+              isCurrent 
+                ? "bg-[#ff9900] text-black ring-4 ring-[#ff9900]/30 shadow-2xl z-20 scale-110" 
+                : "bg-yellow-400/40 text-white"
+            }`}
           >
             {part}
           </mark>
@@ -284,9 +329,39 @@ export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanel
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search in text..."
-                    className="w-full bg-surface border border-border rounded-md px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-primary transition-colors pl-7"
+                    className="w-full bg-surface border border-border rounded-md px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-primary transition-colors pl-7 pr-20"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        if (e.shiftKey) handlePrevMatch();
+                        else handleNextMatch();
+                      }
+                    }}
                   />
                   <span className="absolute left-2.5 top-1.5 text-text-muted text-[10px]">🔍</span>
+                  
+                  {searchQuery.trim().length >= 2 && (
+                    <div className="absolute right-2 top-1 flex items-center gap-1.5 bg-surface-elevated pl-2">
+                       <span className="text-[10px] text-text-muted font-mono">
+                        {totalMatches > 0 ? currentSearchIndex + 1 : 0}/{totalMatches}
+                      </span>
+                      <div className="flex border-l border-border ml-1 pl-1 gap-0.5">
+                        <button 
+                          onClick={handlePrevMatch}
+                          className="hover:text-primary transition-colors p-0.5"
+                          title="Previous (Shift+Enter)"
+                        >
+                          <span className="rotate-180 block">▼</span>
+                        </button>
+                        <button 
+                          onClick={handleNextMatch}
+                          className="hover:text-primary transition-colors p-0.5"
+                          title="Next (Enter)"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={handleCopy}

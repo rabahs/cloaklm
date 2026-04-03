@@ -6,6 +6,9 @@ interface ChatHeaderProps {
   hasApiKey: boolean;
   hasMessages: boolean;
   onOpenHistory: () => void;
+  isSidebarOpen: boolean;
+  onToggleSidebar: () => void;
+  docCount: number;
 }
 
 export function ChatHeader({ 
@@ -13,7 +16,10 @@ export function ChatHeader({
   onNewChat, 
   hasApiKey, 
   hasMessages,
-  onOpenHistory
+  onOpenHistory,
+  isSidebarOpen,
+  onToggleSidebar,
+  docCount
 }: ChatHeaderProps) {
 
 
@@ -53,6 +59,23 @@ export function ChatHeader({
           🕰️ History
         </button>
 
+        <button
+          onClick={onToggleSidebar}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+            isSidebarOpen 
+              ? "bg-primary/10 border-primary/30 text-primary" 
+              : "bg-surface border-border text-text-secondary hover:text-text-primary hover:border-primary/50"
+          }`}
+          title={isSidebarOpen ? "Close Documents Sidebar" : "Open Documents Sidebar"}
+        >
+          <span>📄</span>
+          <span>Docs</span>
+          {docCount > 0 && (
+            <span className="flex items-center justify-center min-w-[18px] h-[18px] bg-primary text-white text-[10px] font-bold rounded-full px-1">
+              {docCount}
+            </span>
+          )}
+        </button>
 
         <button
           onClick={onOpenSettings}

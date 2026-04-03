@@ -38,6 +38,7 @@ export interface AppSettings {
   ollamaUrl: string;
   activeModels?: Record<LLMProvider, string>;
   customModels?: Record<LLMProvider, string[]>;
+  showDocsSidebar?: boolean;
 }
 
 export interface ChatSession {

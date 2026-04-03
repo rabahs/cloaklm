@@ -7,6 +7,8 @@ import { WelcomeScreen } from "./components/WelcomeScreen";
 import { ReviewPanel } from "./components/ReviewPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { listen } from "@tauri-apps/api/event";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { callLLM } from "./llm";
 import type { Message, Attachment, LLMProvider, AppSettings, ChatSession } from "./types";
 import { loadSettingsStore, saveSettingsStore, loadChatSessions, saveChatSessions } from "./store";
@@ -296,6 +298,7 @@ function App() {
     };
   }, [handleFiles]);
 
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -472,6 +475,70 @@ function App() {
     setCurrentSessionId(null);
   };
 
+  const handleExport = async () => {
+    if (messages.length === 0) return;
+
+    try {
+      const timestamp = new Date().toISOString().split('T')[0];
+      const defaultPath = `cloaklm_transcript_${timestamp}.md`;
+      
+      const filePath = await save({
+        filters: [{
+          name: 'Markdown',
+          extensions: ['md']
+        }],
+        defaultPath
+      });
+
+      if (!filePath) return;
+
+      let content = `# CloakLM Chat Transcript\n\n`;
+      content += `**Date:** ${new Date().toLocaleString()}\n`;
+      content += `**Model:** \`${settings.activeModels?.[settings.provider] || 'unknown'}\`\n\n`;
+      content += `---\n\n`;
+
+      messages.forEach(msg => {
+        const role = msg.role === 'user' ? '👤 USER' : '🤖 CLOAK-LLM';
+        content += `## ${role}\n\n${msg.content}\n\n`;
+        
+        if (msg.attachments && msg.attachments.length > 0) {
+          content += `*Attachments:* ${msg.attachments.map(a => `\`${a.fileName}\``).join(', ')}\n\n`;
+        }
+        content += `---\n\n`;
+      });
+
+      content += `*Exported via CloakLM — Privacy-First LLM Interface*\n`;
+
+      await writeTextFile(filePath, content);
+    } catch (err) {
+      console.error("Failed to export transcript:", err);
+    }
+  };
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMod = e.metaKey || e.ctrlKey;
+      
+      if (isMod && e.key === "n") {
+        e.preventDefault();
+        handleNewChat();
+      } else if (isMod && e.key === ",") {
+        e.preventDefault();
+        setShowSettings(true);
+      } else if (isMod && e.key === "h") {
+        e.preventDefault();
+        setShowHistory(true);
+      } else if (isMod && e.key === "d") {
+        e.preventDefault();
+        handleToggleSidebar();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleNewChat, handleToggleSidebar]);
+
   return (
     <div
       className="flex flex-col h-screen bg-surface relative"
@@ -488,6 +555,7 @@ function App() {
         hasMessages={messages.length > 0}
         isSidebarOpen={!!settings.showDocsSidebar}
         onToggleSidebar={handleToggleSidebar}
+        onExport={handleExport}
         docCount={Object.keys(historyAttachments).length}
       />
 

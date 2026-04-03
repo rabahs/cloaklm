@@ -42,6 +42,8 @@ jobs:
       - name: build sidecar binary
         shell: bash
         run: |
+          set -euxo pipefail
+
           # Determine the target triplet for Tauri
           if [ "${{ matrix.platform }}" == "macos-latest" ]; then
             TARGET="aarch64-apple-darwin"
@@ -50,10 +52,10 @@ jobs:
           else
             TARGET="x86_64-unknown-linux-gnu"
           fi
-          
+
           echo "Building sidecar for $TARGET..."
           mkdir -p src-tauri/bin
-          
+
           cd sidecar
           python -m PyInstaller --clean --noconfirm --onefile \
             --name "cloaklm-sidecar-$TARGET" \
@@ -79,9 +81,38 @@ jobs:
             --copy-metadata docling-core \
             --copy-metadata docling-parse \
             server.py
-            
+
+          echo "=== PyInstaller dist output ==="
+          ls -la dist/
+
           mv "dist/cloaklm-sidecar-$TARGET"* "../src-tauri/bin/"
           cd ..
+
+      - name: verify sidecar binary exists
+        shell: bash
+        run: |
+          echo "=== Contents of src-tauri/bin/ ==="
+          ls -la src-tauri/bin/
+
+          if [ "${{ matrix.platform }}" == "macos-latest" ]; then
+            TARGET="aarch64-apple-darwin"
+          elif [ "${{ matrix.platform }}" == "windows-latest" ]; then
+            TARGET="x86_64-pc-windows-msvc"
+          else
+            TARGET="x86_64-unknown-linux-gnu"
+          fi
+
+          EXPECTED="src-tauri/bin/cloaklm-sidecar-$TARGET"
+          if [ "${{ matrix.platform }}" == "windows-latest" ]; then
+            EXPECTED="${EXPECTED}.exe"
+          fi
+
+          if [ ! -f "$EXPECTED" ]; then
+            echo "ERROR: Sidecar binary not found at $EXPECTED"
+            exit 1
+          fi
+
+          echo "Sidecar binary verified: $EXPECTED ($(du -h "$EXPECTED" | cut -f1))"
 
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'

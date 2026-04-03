@@ -8,6 +8,7 @@ interface ChatHeaderProps {
   onOpenHistory: () => void;
   isSidebarOpen: boolean;
   onToggleSidebar: () => void;
+  onExport: () => void;
   docCount: number;
 }
 
@@ -19,6 +20,7 @@ export function ChatHeader({
   onOpenHistory,
   isSidebarOpen,
   onToggleSidebar,
+  onExport,
   docCount
 }: ChatHeaderProps) {
 
@@ -58,6 +60,16 @@ export function ChatHeader({
         >
           🕰️ History
         </button>
+
+        {hasMessages && (
+          <button
+            onClick={onExport}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-border rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:border-primary/50 transition-all"
+            title="Export Anonymized Transcript"
+          >
+            📤 Export
+          </button>
+        )}
 
         <button
           onClick={onToggleSidebar}

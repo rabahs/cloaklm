@@ -31,21 +31,22 @@
 - [x] "New Chat" button
 - [x] Improved system prompt for messy PDF formatting
 
-## Milestone 4 🔜 — Distribution & Packaging
-- [ ] Bundle Python sidecar via PyInstaller into a single binary
-- [ ] Tauri auto-spawns sidecar as child process on app launch
-- [ ] Dynamic port assignment (sidecar picks random free port, reports via stdout)
-- [ ] Auto-restart sidecar on crash
-- [ ] Health-check polling with user-friendly error states
-- [ ] macOS `.dmg` build
-- [ ] Windows `.msi` build
-- [ ] Secure API key storage (migrate from localStorage to Tauri's secure store)
+## Milestone 4 ✅ — Distribution & Packaging
+- [x] Bundle Python sidecar via PyInstaller into a single binary
+- [x] Tauri auto-spawns sidecar as child process on app launch
+- [x] Dynamic port assignment (sidecar picks random free port, reports via stdout)
+- [x] Auto-restart sidecar on crash
+- [x] Health-check polling with user-friendly error states
+- [x] macOS `.dmg` build (CI/CD via GitHub Actions)
+- [x] Windows `.msi` build (CI/CD via GitHub Actions)
+- [x] Secure API key storage (migrated to Tauri's secure store plugin)
 
 ## Milestone 5 — Polish & Post-MVP
+- [x] Conversation history persistence (save/load past chats)
+- [x] Multi-file chat context (persistent Document Sidebar)
+- [x] Enhanced Search in Review Panel (navigation, count, auto-scroll)
 - [ ] Hybrid BYOK: OAuth-based model access (use existing Claude/Gemini subscriptions)
-- [ ] Conversation history persistence (save/load past chats)
-- [ ] Multi-file chat context (drop multiple PDFs)
-- [ ] Export anonymized chat transcripts
-- [ ] IRS form-specific post-processing (structured Box extraction for W-2, 1098-T, 1099)
-- [ ] Keyboard shortcuts (Cmd+N for new chat, Cmd+, for settings)
+- [x] Export anonymized chat transcripts (Markdown)
+- [ ] IRS form-specific post-processing (structured Box extraction)
+- [x] Global Keyboard shortcuts (Cmd+N, Cmd+H, Cmd+D, Cmd+,)
 - [ ] Auto-update mechanism

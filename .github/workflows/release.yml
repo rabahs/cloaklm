@@ -52,7 +52,7 @@ jobs:
           fi
           
           echo "Building sidecar for $TARGET..."
-          mkdir -p src-tauri/binaries
+          mkdir -p src-tauri/bin
           
           cd sidecar
           python -m PyInstaller --clean --noconfirm --onefile \
@@ -80,7 +80,7 @@ jobs:
             --copy-metadata docling-parse \
             server.py
             
-          mv "dist/cloaklm-sidecar-$TARGET"* "../src-tauri/binaries/"
+          mv "dist/cloaklm-sidecar-$TARGET"* "../src-tauri/bin/"
           cd ..
 
       - name: install dependencies (ubuntu only)
@@ -94,6 +94,18 @@ jobs:
 
       - name: build frontend
         run: npm run build
+
+      - name: update website version
+        shell: bash
+        run: |
+          # Replace __VERSION__ with the tag versions (e.g., 0.3.1)
+          VERSION=${{ github.ref_name }}
+          VERSION_CLEAN=${VERSION#v}
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i "" "s/__VERSION__/$VERSION_CLEAN/g" site/index.html
+          else
+            sed -i "s/__VERSION__/$VERSION_CLEAN/g" site/index.html
+          fi
 
       - uses: tauri-apps/tauri-action@v0.5.24
         env:

@@ -28,7 +28,7 @@
     "active": true,
     "targets": "all",
     "externalBin": [
-      "cloaklm-sidecar"
+      "bin/cloaklm-sidecar"
     ],
     "icon": [
       "icons/32x32.png",

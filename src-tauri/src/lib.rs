@@ -44,7 +44,7 @@ pub fn run() {
                     }
 
                     println!("🚀 Spawning CloakLM sidecar...");
-                    let sidecar_command = app_handle.shell().sidecar("cloaklm-sidecar");
+                    let sidecar_command = app_handle.shell().sidecar("bin/cloaklm-sidecar");
                     
                     if let Ok(cmd) = sidecar_command {
                         if let Ok((mut rx, child)) = cmd.spawn() {

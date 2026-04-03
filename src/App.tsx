@@ -11,6 +11,7 @@ import { callLLM } from "./llm";
 import type { Message, Attachment, LLMProvider, AppSettings, ChatSession } from "./types";
 import { loadSettingsStore, saveSettingsStore, loadChatSessions, saveChatSessions } from "./store";
 import { HistoryModal } from "./components/HistoryModal";
+import { DocumentSidebar } from "./components/DocumentSidebar";
 
 const DEFAULT_SETTINGS: AppSettings = {
   provider: "claude",
@@ -24,7 +25,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   },
   customModels: {
     claude: [], gemini: [], openai: [], ollama: []
-  }
+  },
+  showDocsSidebar: false
 };
 
 function App() {
@@ -131,6 +133,14 @@ function App() {
     saveSettingsStore(newSettings);
     refreshAvailableProviders(newSettings);
   }, [refreshAvailableProviders]);
+
+  const handleToggleSidebar = useCallback(() => {
+    setSettings((prev) => {
+      const next = { ...prev, showDocsSidebar: !prev.showDocsSidebar };
+      saveSettingsStore(next);
+      return next;
+    });
+  }, []);
 
   // Check if current provider has an API key
   const hasApiKey = provider === "ollama" || !!settings.apiKeys[provider as keyof typeof settings.apiKeys]?.trim();
@@ -476,9 +486,13 @@ function App() {
         onNewChat={handleNewChat}
         hasApiKey={hasApiKey}
         hasMessages={messages.length > 0}
+        isSidebarOpen={!!settings.showDocsSidebar}
+        onToggleSidebar={handleToggleSidebar}
+        docCount={Object.keys(historyAttachments).length}
       />
 
-      <main className="flex-1 overflow-hidden flex flex-col relative">
+      <div className="flex-1 flex overflow-hidden">
+        <main className="flex-1 overflow-hidden flex flex-col relative">
         {engineStatus === 'loading' && (
           <div className="absolute top-0 left-0 right-0 bg-primary/10 border-b border-primary/20 p-2 text-center text-sm text-primary animate-pulse z-10">
             🛡️ CloakLM Shield is initializing AI models... (30-40 seconds)
@@ -512,7 +526,16 @@ function App() {
         ) : (
           <MessageList messages={messages} isLoading={isLoading} />
         )}
-      </main>
+        </main>
+
+        {settings.showDocsSidebar && (
+          <DocumentSidebar 
+            documents={Object.values(historyAttachments)}
+            onReview={setReviewingAttachment}
+            onClose={handleToggleSidebar}
+          />
+        )}
+      </div>
 
       <ChatInput
         onSend={sendMessage}

@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-latest, ubuntu-22.04, windows-latest]
+        platform: [macos-latest, windows-latest]
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -114,12 +114,6 @@ jobs:
 
           echo "Sidecar binary verified: $EXPECTED ($(du -h "$EXPECTED" | cut -f1))"
 
-      - name: install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-        
       - name: install frontend dependencies
         run: npm install
 
@@ -136,7 +130,7 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          args: --verbose ${{ matrix.platform == 'ubuntu-22.04' && '--bundles deb' || '' }}
+          args: --verbose
           tagName: ${{ github.ref_name }}
           releaseName: 'CloakLM ${{ github.ref_name }}'
           releaseBody: |

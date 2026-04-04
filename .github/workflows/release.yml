@@ -129,21 +129,21 @@ jobs:
       - uses: tauri-apps/tauri-action@v0.5.24
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: "Developer ID Application: BitHunch LLC (V9MD2XLT56)"
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           args: --verbose
-          tagName: ${{ github.ref_name }} # the action automatically creates a release for this tag
+          tagName: ${{ github.ref_name }}
           releaseName: 'CloakLM ${{ github.ref_name }}'
           releaseBody: |
-            ### CloakLM v0.3.0 — The Hardened Update
-            
-            This release brings major security and usability improvements:
-            
-            *   **🛡️ Secure Storage**: API keys are now stored in an encrypted local keystore rather than plain-text localStorage.
-            *   **🕰️ Chat History**: Your conversations are now automatically persisted locally and can be reloaded via the new History menu.
-            *   **✨ Unified Branding**: Integrated the official CloakLM logo across the application UI and OS icons.
-            *   **🔌 Dynamic Backend**: The Python sidecar now binds to dynamic ports and scrubs logs to ensure zero PII leakage during local processing.
-            *   **🐛 Fixed Bug**: Resolved an issue where reloading chat history caused a blank screen due to date parsing.
-            
-            **Note:** This version still requires the sidecar environment to be present.
+            ### CloakLM ${{ github.ref_name }}
+
+            See [CHANGELOG](https://github.com/rabahs/cloaklm/blob/main/CHANGELOG.md) for details.
+
+            **macOS:** This build is signed and notarized — no `xattr` workaround needed.
           releaseDraft: false
           prerelease: false

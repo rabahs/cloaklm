@@ -1,4 +1,4 @@
-import type { LLMProvider, Attachment } from "./types";
+import type { LLMProvider, Attachment, DeepScanSuggestion } from "./types";
 
 // Provider configuration
 const PROVIDER_CONFIG: Record<string, { url: string; defaultModel: string }> = {
@@ -44,8 +44,6 @@ export function getProviderIcon(provider: LLMProvider): string {
 export function anonymizePrompt(text: string, attachments: Attachment[]): string {
   if (!text || !attachments.length) return text;
 
-  const start = performance.now();
-  
   // 1. Build a unique set of all PII tokens to redact
   const tokenMap = new Map<string, string>(); // real_value -> placeholder
   
@@ -98,9 +96,6 @@ export function anonymizePrompt(text: string, attachments: Attachment[]): string
     return tokenMap.get(match.toLowerCase()) || match;
   });
 
-  const duration = performance.now() - start;
-  console.log(`🛡️ CloakLM Firewall: Scanned ${text.length} chars in ${duration.toFixed(2)}ms. Redacted ${tokenMap.size} unique PII rules.`);
-  
   return result;
 }
 
@@ -138,6 +133,91 @@ export function deAnonymize(
     }
   }
   return result;
+}
+
+// ---------- Deep Scan with Local LLM ----------
+
+const DEEP_SCAN_PROMPT = `You are a strict PII detection scanner. A document has been partially anonymized — items in [SQUARE_BRACKETS] like [PERSON_1] are already redacted. IGNORE those.
+
+Your job: find REMAINING real personal information that was MISSED. Scan every line carefully.
+
+WHAT TO FLAG (with exact text as it appears):
+- People's names: first names, last names, full names, initials with last name (e.g. "R. Shihab")
+- Street addresses: house numbers + street names (e.g. "742 Evergreen Terrace")
+- Cities, states, ZIP codes that identify a location (e.g. "Springfield, IL 62704")
+- Phone numbers, even partial (e.g. "555-0123", "(312) 555")
+- SSN, even last 4 digits (e.g. "6789", "XXX-XX-6789")
+- Email addresses (e.g. "john@example.com")
+- Account numbers, loan numbers, policy numbers
+- Employer names, school/university names
+- Dates of birth in any format
+
+WHAT TO IGNORE (do NOT flag these):
+- Anything in [SQUARE_BRACKETS] — already redacted
+- Generic terms: "taxpayer", "student", "applicant", "borrower"
+- Form labels: "Box 1", "Line 12a", "Form 1098-T"
+- Dollar amounts, tax figures, percentages
+- Tax years (e.g. "2025", "2026")
+
+EXAMPLES:
+Input: "Tuition paid by [PERSON_1] at Springfield University, 456 Oak Street, Springfield IL"
+Output: [{"text": "Springfield University", "category": "ORGANIZATION"}, {"text": "456 Oak Street", "category": "ADDRESS"}, {"text": "Springfield IL", "category": "ADDRESS"}]
+
+Input: "SSN ending in 6789 for tax year 2025"
+Output: [{"text": "6789", "category": "SSN_PARTIAL"}]
+
+Input: "[PERSON_1] received Form 1098-T showing $5,000 in Box 1"
+Output: []
+
+Return ONLY a JSON array. No explanation. If nothing found, return [].
+
+Document:
+---
+`;
+
+export async function deepScanWithLLM(
+  anonymizedContent: string,
+  ollamaUrl: string,
+  model: string
+): Promise<DeepScanSuggestion[]> {
+  const prompt = DEEP_SCAN_PROMPT + anonymizedContent + "\n---";
+
+  const response = await fetch(`${ollamaUrl}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      stream: false,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Deep Scan failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const raw = data.message?.content || "[]";
+
+  // Extract JSON array from response (LLM might wrap it in markdown code blocks)
+  const jsonMatch = raw.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) return [];
+
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter((item: { text?: string; category?: string }) => item.text && item.category)
+      .map((item: { text: string; category: string }) => ({
+        id: crypto.randomUUID(),
+        text: item.text,
+        category: item.category,
+        status: "pending" as const,
+      }));
+  } catch {
+    return [];
+  }
 }
 
 // ---------- Provider-specific API callers ----------
@@ -335,8 +415,6 @@ export async function callLLM(options: LLMCallOptions): Promise<string> {
 
   const finalSystemRole = "Factual Analysis Mode. Direct answers only.";
 
-  // Local debug log (only visible in dev console)
-  console.log(`🛡️ CloakLM Sentinel: Verified zero PII & injected context for ${provider}.`);
   // --- PRIVACY GATEKEEPER END ---
 
   switch (provider) {

@@ -5,6 +5,12 @@ interface ReviewPanelProps {
   attachment: Attachment;
   onClose: () => void;
   onManualRedact: (attachmentId: string, selectedText: string, newContent: string, newEntry: RedactionEntry) => void;
+  onAcceptSuggestion?: (attachmentId: string, suggestionId: string) => void;
+  onDismissSuggestion?: (attachmentId: string, suggestionId: string) => void;
+  onAcceptAllSuggestions?: (attachmentId: string) => void;
+  onDismissAllSuggestions?: (attachmentId: string) => void;
+  deepScanEnabled?: boolean;
+  deepScanModel?: string;
 }
 
 interface FloatingButton {
@@ -13,7 +19,7 @@ interface FloatingButton {
   text: string;
 }
 
-export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanelProps) {
+export function ReviewPanel({ attachment, onClose, onManualRedact, onAcceptSuggestion, onDismissSuggestion, onAcceptAllSuggestions, onDismissAllSuggestions, deepScanEnabled, deepScanModel }: ReviewPanelProps) {
   const [viewMode, setViewMode] = useState<"list" | "raw">("list");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
@@ -28,6 +34,7 @@ export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanel
 
   // Count how many manual redactions already exist
   const manualCount = entries.filter(e => e.category === "manual").length;
+  const pendingSuggestions = (attachment.deepScanSuggestions || []).filter(s => s.status === "pending");
 
   const handleCopy = useCallback(() => {
     if (!attachment.anonymizedContent) return;
@@ -105,6 +112,7 @@ export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanel
       real_value: selectedText,
       placeholder,
       category: "manual",
+      source: "manual",
     };
 
     onManualRedact(attachment.id, selectedText, newContent, newEntry);
@@ -119,13 +127,13 @@ export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanel
   // Handle scrolling to current match
   useEffect(() => {
     if (viewMode === "raw" && matchRefs.current[currentSearchIndex]) {
-      matchRefs.current[currentSearchIndex]?.scrollIntoView({ 
-        behavior: "smooth", 
+      matchRefs.current[currentSearchIndex]?.scrollIntoView({
+        behavior: "smooth",
         block: "center",
         inline: "nearest"
       });
     }
-  }, [currentSearchIndex, viewMode]);
+  }, [currentSearchIndex, viewMode, totalMatches]);
 
   // Reset search index when query changes
   useEffect(() => {
@@ -135,12 +143,21 @@ export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanel
   const handleNextMatch = useCallback(() => {
     const total = totalMatches;
     if (total === 0) return;
+    if (total === 1) {
+      // Force scroll to the single match even though index doesn't change
+      matchRefs.current[0]?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      return;
+    }
     setCurrentSearchIndex((prev) => (prev + 1) % total);
   }, [totalMatches]);
 
   const handlePrevMatch = useCallback(() => {
     const total = totalMatches;
     if (total === 0) return;
+    if (total === 1) {
+      matchRefs.current[0]?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      return;
+    }
     setCurrentSearchIndex((prev) => (prev - 1 + total) % total);
   }, [totalMatches]);
 
@@ -279,45 +296,187 @@ export function ReviewPanel({ attachment, onClose, onManualRedact }: ReviewPanel
 
           {viewMode === "list" ? (
             <div className="space-y-3">
-              <div className="mb-2 bg-success/10 border border-success/20 rounded-xl p-4">
-                <h3 className="text-sm font-bold text-success flex items-center gap-2 mb-1">
-                  <span>✅</span> Completely Local
-                </h3>
-                <p className="text-xs text-text-secondary leading-relaxed">
-                  These items were removed from the document{" "}
-                  <strong>before</strong> it ever reached the AI. Only the [BRACKETED] placeholders will be sent.
-                </p>
-              </div>
+              {/* Pipeline Summary */}
+              {(() => {
+                const glinerCount = entries.filter(e => !e.source || e.source === "gliner").length;
+                const deepCount = entries.filter(e => e.source === "deep-scan").length;
+                const manualCountTotal = entries.filter(e => e.source === "manual" || (!e.source && e.category === "manual")).length;
+                const totalCount = entries.length;
+                const isScanning = attachment.status === "deep-scanning";
 
-              {entries.length === 0 ? (
+                return (
+                  <div className="mb-3 bg-surface border border-border rounded-xl p-4 space-y-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="text-[11px] font-bold text-text-primary uppercase tracking-wider">Redaction Pipeline</h3>
+                      <span className="text-[10px] font-bold text-success bg-success/10 px-2 py-0.5 rounded-full">
+                        🛡️ {totalCount} total
+                      </span>
+                    </div>
+
+                    {/* Pass 1: GLiNER */}
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-success">✅</span>
+                        <span className="text-text-secondary">Pass 1</span>
+                        <span className="text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">GLiNER</span>
+                      </div>
+                      <span className="text-text-muted font-mono text-[11px]">{glinerCount} found</span>
+                    </div>
+
+                    {/* Pass 2: Deep Scan — only show if enabled or has results */}
+                    {(deepScanEnabled || isScanning || deepCount > 0) && (
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          {isScanning ? (
+                            <span className="text-blue-400 animate-pulse">🔄</span>
+                          ) : (
+                            <span className="text-success">✅</span>
+                          )}
+                          <span className="text-text-secondary">Pass 2</span>
+                          <span className="text-[10px] font-bold text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                            {deepScanModel || "LLM"}
+                          </span>
+                        </div>
+                        <span className="text-text-muted font-mono text-[11px]">
+                          {isScanning ? "scanning..." : `${deepCount} found`}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Manual */}
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className={manualCountTotal > 0 ? "text-success" : "text-text-muted"}>
+                          {manualCountTotal > 0 ? "✅" : "—"}
+                        </span>
+                        <span className="text-text-secondary">Manual</span>
+                        <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">✋</span>
+                      </div>
+                      <span className="text-text-muted font-mono text-[11px]">{manualCountTotal} added</span>
+                    </div>
+
+                    <div className="border-t border-border pt-2 mt-1">
+                      <p className="text-[10px] text-text-muted leading-relaxed">
+                        All redactions happen <strong className="text-text-secondary">locally on your device</strong> before the AI sees anything.
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {entries.length === 0 && (!pendingSuggestions || pendingSuggestions.length === 0) ? (
                 <div className="text-center text-text-muted py-8 text-sm">
                   No PII detected in this document.
                 </div>
               ) : (
-                entries.map((entry, idx) => (
-                  <div key={idx} className={`bg-surface border rounded-lg p-3 flex flex-col gap-2 ${
-                    entry.category === "manual" ? "border-amber-500/30" : "border-border"
-                  }`}>
-                    <div className="flex justify-between items-center">
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                        entry.category === "manual"
-                          ? "text-amber-400 bg-amber-500/10"
-                          : "text-primary bg-primary/10"
-                      }`}>
-                        {entry.category === "manual" ? "✋ Manual" : entry.category || "Entity"}
-                      </span>
-                      <span className="text-xs text-text-muted font-mono bg-surface-hover px-1.5 py-0.5 rounded">
-                        {entry.placeholder}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3 mt-1">
-                      <div className="flex-1 text-sm text-danger line-through opacity-70 truncate px-2 border-l-2 border-danger/30">
-                        {entry.real_value}
+                <>
+                  {/* Deep Scan Suggestions — shown first so user sees them immediately */}
+                  {pendingSuggestions.length > 0 && (
+                    <>
+                      <div className="mt-4 mb-2 bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
+                            🔍 Deep Scan found {pendingSuggestions.length} suggestion{pendingSuggestions.length !== 1 ? "s" : ""}
+                          </h3>
+                        </div>
+                        <div className="flex gap-1.5">
+                          {onAcceptAllSuggestions && (
+                            <button
+                              onClick={() => onAcceptAllSuggestions(attachment.id)}
+                              className="text-[10px] font-bold px-2 py-1 bg-success/20 text-success rounded-md hover:bg-success/30 transition-colors"
+                            >
+                              Accept All
+                            </button>
+                          )}
+                          {onDismissAllSuggestions && (
+                            <button
+                              onClick={() => onDismissAllSuggestions(attachment.id)}
+                              className="text-[10px] font-bold px-2 py-1 bg-surface text-text-muted rounded-md hover:text-text-primary hover:bg-surface-hover transition-colors border border-border"
+                            >
+                              Dismiss All
+                            </button>
+                          )}
+                        </div>
                       </div>
+
+                      {pendingSuggestions.map((suggestion) => (
+                        <div key={suggestion.id} className="bg-surface border border-blue-500/20 rounded-lg p-3 flex flex-col gap-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full text-blue-400 bg-blue-500/10">
+                              🔍 {suggestion.category}
+                            </span>
+                          </div>
+                          <div className="text-sm text-text-primary px-2 border-l-2 border-blue-500/30 font-mono">
+                            "{suggestion.text}"
+                          </div>
+                          <div className="flex gap-2 mt-1">
+                            {onAcceptSuggestion && (
+                              <button
+                                onClick={() => onAcceptSuggestion(attachment.id, suggestion.id)}
+                                className="flex-1 py-1.5 text-[10px] font-bold bg-success/10 text-success border border-success/20 rounded-md hover:bg-success/20 transition-colors"
+                              >
+                                ✓ Redact
+                              </button>
+                            )}
+                            {onDismissSuggestion && (
+                              <button
+                                onClick={() => onDismissSuggestion(attachment.id, suggestion.id)}
+                                className="flex-1 py-1.5 text-[10px] font-bold bg-surface text-text-muted border border-border rounded-md hover:text-text-primary hover:bg-surface-hover transition-colors"
+                              >
+                                ✕ Dismiss
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Deep scanning indicator */}
+                  {attachment.status === "deep-scanning" && (
+                    <div className="mb-3 bg-blue-500/5 border border-blue-500/15 rounded-xl p-4 text-center animate-pulse">
+                      <span className="text-xs text-blue-400 font-medium">🔍 Deep Scan in progress...</span>
                     </div>
-                  </div>
-                ))
+                  )}
+
+                  {/* Confirmed redactions */}
+                  {entries.map((entry, idx) => {
+                    const source = entry.source || (entry.category === "manual" ? "manual" : "gliner");
+                    return (
+                      <div key={idx} className={`bg-surface border rounded-lg p-3 flex flex-col gap-2 ${
+                        source === "manual" ? "border-amber-500/30" :
+                        source === "deep-scan" ? "border-blue-500/20" : "border-border"
+                      }`}>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            source === "manual"
+                              ? "text-amber-400 bg-amber-500/10"
+                              : source === "deep-scan"
+                                ? "text-blue-400 bg-blue-500/10"
+                                : "text-primary bg-primary/10"
+                          }`}>
+                            {source === "manual" ? "✋ Manual" :
+                             source === "deep-scan" ? `🔍 Deep${entry.sourceModel ? " · " + entry.sourceModel : ""}` :
+                             "GLiNER"}
+                          </span>
+                          {source !== "manual" && (
+                            <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-hover text-text-muted">
+                              {entry.category || "Entity"}
+                            </span>
+                          )}
+                          <span className="text-xs text-text-muted font-mono bg-surface-hover px-1.5 py-0.5 rounded ml-auto">
+                            {entry.placeholder}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1">
+                          <div className="flex-1 text-sm text-danger line-through opacity-70 truncate px-2 border-l-2 border-danger/30">
+                            {entry.real_value}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
               )}
             </div>
           ) : (

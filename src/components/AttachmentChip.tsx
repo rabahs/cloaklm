@@ -15,7 +15,11 @@ export function AttachmentChip({
 }: AttachmentChipProps) {
   const isReady = attachment.status === "ready";
   const isAnonymizing = attachment.status === "anonymizing";
+  const isDeepScanning = attachment.status === "deep-scanning";
   const isError = attachment.status === "error";
+  const isProcessing = isAnonymizing || isDeepScanning;
+
+  const pendingSuggestions = (attachment.deepScanSuggestions || []).filter(s => s.status === "pending").length;
 
   if (compact) {
     return (
@@ -28,6 +32,16 @@ export function AttachmentChip({
     );
   }
 
+  const count = attachment.redactionCount || 0;
+  const statusText = () => {
+    if (isAnonymizing) return "Pass 1 · GLiNER scanning...";
+    if (isDeepScanning) return `Pass 2 · Deep Scan · ${count} PII found`;
+    if (isError) return attachment.error || "Anonymization failed";
+    if (pendingSuggestions > 0)
+      return `🛡️ ${count} PII redacted · ${pendingSuggestions} to review`;
+    return `🛡️ ${count} PII redacted`;
+  };
+
   return (
     <div className="relative group flex items-start gap-3 bg-surface border border-border rounded-xl p-3 pr-8 min-w-[200px] max-w-[280px] shadow-sm hover:border-primary/50 transition-colors">
       {/* Icon/Status Indicator */}
@@ -36,18 +50,20 @@ export function AttachmentChip({
           className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg ${
             isReady
               ? "bg-success/10 text-success"
-              : isAnonymizing
-              ? "bg-warning/10 text-warning"
+              : isProcessing
+              ? "bg-primary/10 text-primary"
               : "bg-danger/10 text-danger"
           }`}
         >
           📄
         </div>
-        {/* Status Badge Overlays */}
         <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-surface flex items-center justify-center">
-          {isReady && <span className="text-[10px]">✅</span>}
+          {isReady && pendingSuggestions === 0 && <span className="text-[10px]">✅</span>}
+          {isReady && pendingSuggestions > 0 && (
+            <span className="text-[10px] text-warning font-bold">🔍</span>
+          )}
           {isError && <span className="text-[10px]">❌</span>}
-          {isAnonymizing && (
+          {isProcessing && (
             <div className="w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full spinner" />
           )}
         </div>
@@ -58,16 +74,19 @@ export function AttachmentChip({
         <span className="font-semibold text-sm text-text-primary truncate">
           {attachment.anonymizedFileName || attachment.fileName}
         </span>
-        <span className="text-xs text-text-secondary mt-0.5">
-          {isAnonymizing
-            ? "Anonymizing locally..."
-            : isError
-            ? attachment.error || "Anonymization failed"
-            : `${attachment.redactionCount || 0} items redacted`}
+        <span className={`text-xs mt-0.5 ${isProcessing ? "text-primary animate-pulse" : isError ? "text-danger" : "text-text-secondary"}`}>
+          {statusText()}
         </span>
 
+        {/* Show running redaction count during processing */}
+        {isDeepScanning && attachment.redactionCount !== undefined && attachment.redactionCount > 0 && (
+          <span className="text-[10px] text-text-muted mt-0.5">
+            🛡️ {attachment.redactionCount} from Pass 1
+          </span>
+        )}
+
         {isReady && (
-          <button 
+          <button
             onClick={onReview}
             className="text-[10px] uppercase font-bold text-primary mt-2 text-left hover:underline w-max"
           >

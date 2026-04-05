@@ -45,17 +45,20 @@ export function DocumentSidebar({ documents, onReview, onClose }: DocumentSideba
                   <h3 className="text-xs font-semibold text-text-primary truncate mb-1" title={doc.fileName}>
                     {doc.fileName}
                   </h3>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className={`text-[10px] font-bold uppercase tracking-tighter px-1.5 py-0.5 rounded ${
-                      doc.status === 'ready' ? 'bg-success/10 text-success' : 
-                      doc.status === 'anonymizing' ? 'bg-primary/10 text-primary animate-pulse' : 
+                      doc.status === 'ready' ? 'bg-success/10 text-success' :
+                      doc.status === 'anonymizing' ? 'bg-primary/10 text-primary animate-pulse' :
+                      doc.status === 'deep-scanning' ? 'bg-blue-500/10 text-blue-400 animate-pulse' :
                       'bg-danger/10 text-danger'
                     }`}>
-                      {doc.status}
+                      {doc.status === 'anonymizing' ? 'Pass 1 · GLiNER' :
+                       doc.status === 'deep-scanning' ? 'Pass 2 · Deep Scan' :
+                       doc.status}
                     </span>
                     {doc.redactionCount !== undefined && doc.redactionCount > 0 && (
                       <span className="text-[10px] text-text-muted">
-                        🛡️ {doc.redactionCount} Redactions
+                        🛡️ {doc.redactionCount} PII
                       </span>
                     )}
                   </div>

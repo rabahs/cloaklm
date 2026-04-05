@@ -50,3 +50,35 @@
 - [ ] IRS form-specific post-processing (structured Box extraction)
 - [x] Global Keyboard shortcuts (Cmd+N, Cmd+H, Cmd+D, Cmd+,)
 - [ ] Auto-update mechanism
+
+## Milestone 6 ✅ — Left Rail + View System
+- [x] Icon-based left rail navigation (Chats, Projects, History, Settings)
+- [x] Full-page Settings and History views (replaced modals)
+- [x] View routing with animated transitions
+- [x] Cmd+P shortcut for projects
+
+## Milestone 7 ✅ — Projects + Document Management
+- [x] Create, rename, delete projects with confirmation dialogs
+- [x] Documents tab: drag-and-drop upload, status badges, review, remove
+- [x] Per-project document persistence (Tauri store)
+
+## Milestone 8 ✅ — Project Chats + Document Picker
+- [x] Chats tab inside projects (create, delete, load)
+- [x] Document picker sidebar with checkboxes for LLM context control
+- [x] Standalone chats preserved alongside project chats
+- [x] History view shows project tags on project chats
+
+## Milestone 9 ✅ — Deep Scan (LLM-Assisted PII Detection)
+- [x] Two-pass redaction pipeline: GLiNER + local Ollama LLM
+- [x] Settings UI: enable/disable toggle + model picker (auto-discovers Ollama models)
+- [x] Suggestions UI: per-item accept/dismiss + batch Accept All/Dismiss All
+- [x] Redaction provenance badges (GLiNER, Deep Scan + model name, Manual)
+- [x] Pipeline summary dashboard with per-pass counts
+- [x] Status badges show current pass during processing
+
+## Planned
+- [ ] Drag documents between projects
+- [ ] Duplicate projects
+- [ ] Project-level export (all chats + documents)
+- [ ] Global search across projects and chats
+- [ ] Deep scan highlights in raw output view

@@ -1,5 +1,5 @@
 import { load, Store } from '@tauri-apps/plugin-store';
-import type { AppSettings, ChatSession, LLMProvider } from './types';
+import type { AppSettings, ChatSession, LLMProvider, Project } from './types';
 
 // Create a single store instance for the app
 let storePromise: Promise<Store> | null = null;
@@ -60,5 +60,28 @@ export const saveChatSessions = async (sessions: ChatSession[]) => {
     await store.save();
   } catch (e) {
     console.error("Failed to save chat sessions to secure store", e);
+  }
+};
+
+export const loadProjects = async (): Promise<Project[]> => {
+  if (!storePromise) return [];
+  try {
+    const store = await storePromise;
+    const projects = await store.get<Project[]>('projects');
+    return projects || [];
+  } catch (e) {
+    console.error("Failed to load projects from secure store", e);
+    return [];
+  }
+};
+
+export const saveProjects = async (projects: Project[]) => {
+  if (!storePromise) return;
+  try {
+    const store = await storePromise;
+    await store.set('projects', projects);
+    await store.save();
+  } catch (e) {
+    console.error("Failed to save projects to secure store", e);
   }
 };

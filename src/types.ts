@@ -50,11 +50,11 @@ export interface AppSettings {
   ollamaUrl: string;
   activeModels?: Record<LLMProvider, string>;
   customModels?: Record<LLMProvider, string[]>;
-  showDocsSidebar?: boolean;
   deepScan?: {
     enabled: boolean;
     model: string;
   };
+  storageDir?: string;
 }
 
 export interface Project {

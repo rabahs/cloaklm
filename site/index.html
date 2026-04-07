@@ -4,34 +4,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CloakLM | Private AI PDF Chat | Local PII Redaction for LLMs</title>
-    <meta name="description" content="CloakLM: The ultimate privacy layer for AI. Chat with PDFs safely by redacting PII locally before sending data to Claude, OpenAI, or Gemini. Bring your own API key.">
-    <meta name="keywords" content="CloakLM, Private AI, PDF Chat, PII Redaction, Local LLM, Document Privacy, Anonymize PDF for AI, BYOK AI, macOS AI App, Data Privacy, HIPAA Compliant AI, GLiNER, IBM Docling">
-    
+    <meta name="description" content="CloakLM: The ultimate privacy layer for AI. Chat with PDFs safely by redacting PII locally before sending data to Claude, OpenAI, or Gemini. Multi-pass redaction, project management, and BYOK.">
+    <meta name="keywords" content="CloakLM, Private AI, PDF Chat, PII Redaction, Local LLM, Document Privacy, Anonymize PDF for AI, BYOK AI, macOS AI App, Data Privacy, HIPAA Compliant AI, GLiNER, IBM Docling, Deep Scan, Project Management">
+
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://cloaklm.com/">
     <meta property="og:title" content="CloakLM | Private AI PDF Chat | Local PII Redaction for LLMs">
-    <meta property="og:description" content="Chat with sensitive PDFs safely. CloakLM redacts PII locally using GLiNER before sending anonymized text to LLMs.">
+    <meta property="og:description" content="Chat with sensitive PDFs safely. CloakLM redacts PII locally using multi-pass AI before sending anonymized text to LLMs. Organize docs in projects.">
     <meta property="og:image" content="https://cloaklm.com/assets/app_demo.png">
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
     <meta property="twitter:url" content="https://cloaklm.com/">
     <meta property="twitter:title" content="CloakLM | Private AI PDF Chat | Local PII Redaction">
-    <meta property="twitter:description" content="Securely chat with sensitive documents. Local PII redaction ensures your data never leaks to AI providers.">
+    <meta property="twitter:description" content="Securely chat with sensitive documents. Multi-pass local PII redaction ensures your data never leaks to AI providers.">
     <meta property="twitter:image" content="https://cloaklm.com/assets/app_demo.png">
 
     <!-- Canonical URL -->
     <link rel="canonical" href="https://cloaklm.com/">
-    
+
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="assets/logo.png">
-    
+
     <!-- Google Fonts for Modern Typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
-    
+
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -56,19 +56,18 @@
         <div class="hero-content">
             <div class="badge" id="version-badge">Loading...</div>
             <script>
-                // Dynamically fetch the latest tag version from GitHub
                 fetch('https://api.github.com/repos/rabahs/cloaklm/releases/latest')
                     .then(response => response.json())
                     .then(data => {
-                        const version = data.tag_name || 'v0.3.1';
+                        const version = data.tag_name || 'v0.4';
                         document.getElementById('version-badge').textContent = `${version} Now Live`;
                     })
                     .catch(() => {
-                        document.getElementById('version-badge').textContent = 'v0.3.1 Now Live';
+                        document.getElementById('version-badge').textContent = 'v0.4 Now Live';
                     });
             </script>
             <h1>Securely Chat with <br><span class="gradient-text">Sensitive PDF Documents.</span></h1>
-            <p>CloakLM is a <strong>private AI desktop app</strong> that redacts PII from PDFs locally before they reach the cloud. Use Claude, OpenAI, or Gemini without leaking company secrets.</p>
+            <p>CloakLM is a <strong>private AI desktop app</strong> with multi-pass PII redaction, project-based document management, and support for Claude, OpenAI, Gemini, or fully local models. Your PII never leaves your machine.</p>
             <div class="cta-group">
                 <a href="#download" class="btn btn-primary" title="Download CloakLM for macOS">Download for macOS</a>
                 <a href="#features" class="btn btn-secondary" title="Learn about CloakLM Features">Explore Features</a>
@@ -77,7 +76,6 @@
 
         <div class="hero-image-wrapper">
             <div class="glass-frame">
-                <!-- Our dynamically captured app screenshot -->
                 <img src="assets/app_demo.png" alt="CloakLM Application Interface Demo" class="app-mockup">
             </div>
         </div>
@@ -86,29 +84,39 @@
     <section id="features" class="features-section">
         <div class="section-title">
             <h2>Why Choose CloakLM for Document Privacy?</h2>
-            <p>Advanced PII redaction features for enterprise data security when using generative AI.</p>
+            <p>Enterprise-grade PII redaction and document management for secure AI workflows.</p>
         </div>
 
         <div class="feature-grid">
             <div class="feature-card glass-panel">
                 <div class="feature-icon">🧠</div>
-                <h3>Local PII Redaction</h3>
-                <p>Bundled IBM Docling and GLiNER AI scan and redact 100% locally. No PII ever leaves your device.</p>
+                <h3>Multi-Pass PII Redaction</h3>
+                <p>Pass 1: GLiNER + IBM Docling scan locally. Pass 2: Optional deep scan with a local Ollama LLM catches what rule-based models miss. No PII ever leaves your device.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">📁</div>
+                <h3>Project Management</h3>
+                <p>Organize documents into projects. Add multiple PDFs, run multiple chats against the same document set, and toggle which docs are in context per conversation.</p>
             </div>
             <div class="feature-card glass-panel">
                 <div class="feature-icon">🔑</div>
-                <h3>BYOK (Bring Your Own Key)</h3>
-                <p>Connect your own API keys for Claude, Gemini, OpenAI, or run local models via Ollama. You own your data flow.</p>
-            </div>
-            <div class="feature-card glass-panel">
-                <div class="feature-icon">📄</div>
-                <h3>PDF Analysis for AI</h3>
-                <p>Extracts deep layouts, tables, and complex formatting. Perfect for RAG-like document analysis without the security risk.</p>
+                <h3>BYOK &mdash; Bring Your Own Key</h3>
+                <p>Connect your own API keys for Claude, Gemini, OpenAI, or run 100% offline with local models via Ollama. You own your data flow.</p>
             </div>
             <div class="feature-card glass-panel">
                 <div class="feature-icon">🛡️</div>
-                <h3>Secure AI Collaboration</h3>
-                <p>Anonymized entities (e.g., [PERSON_1]) are restored on-device, keeping the LLM in the dark while you get perfect answers.</p>
+                <h3>Review &amp; Control</h3>
+                <p>Review every redaction before sending. Accept or dismiss AI suggestions, manually redact additional text, and see provenance badges showing which pass found each PII.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">📄</div>
+                <h3>Deep PDF Analysis</h3>
+                <p>Extracts layouts, tables, and complex formatting from PDFs. Attach already-redacted project docs to any chat &mdash; no re-processing needed.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🔒</div>
+                <h3>Secure by Design</h3>
+                <p>Anonymized entities (e.g., [PERSON_1]) are restored on-device. API keys stored locally via encrypted Tauri store. No middleman servers, ever.</p>
             </div>
         </div>
     </section>
@@ -116,24 +124,24 @@
     <section id="how-it-works" class="features-section" style="padding-top: 0;">
         <div class="section-title">
             <h2>How CloakLM Secures Your Documents</h2>
-            <p>Three simple steps to absolute PDF privacy in your AI workflow.</p>
+            <p>A multi-pass pipeline ensures nothing slips through.</p>
         </div>
 
         <div class="feature-grid" style="text-align: center;">
             <div class="feature-card glass-panel">
                 <div class="feature-icon" style="font-size: 3rem; background: transparent; border: none; box-shadow: none;">1️⃣</div>
-                <h3>Upload Your PDF</h3>
-                <p>Drag and drop local documents into the secure CloakLM macOS interface.</p>
+                <h3>Upload &amp; Organize</h3>
+                <p>Drop PDFs into a quick chat or organize them into projects for ongoing work with multiple conversations.</p>
             </div>
             <div class="feature-card glass-panel">
                 <div class="feature-icon" style="font-size: 3rem; background: transparent; border: none; box-shadow: none;">2️⃣</div>
-                <h3>Automated Redaction</h3>
-                <p>The on-device AI scours the document for sensitive data and scrubs it offline.</p>
+                <h3>Multi-Pass Redaction</h3>
+                <p>Pass 1 (GLiNER) runs instantly. Enable Pass 2 (Deep Scan) for a local LLM to catch names, addresses, and fragments the first pass missed.</p>
             </div>
             <div class="feature-card glass-panel">
                 <div class="feature-icon" style="font-size: 3rem; background: transparent; border: none; box-shadow: none;">3️⃣</div>
-                <h3>Secure LLM Analysis</h3>
-                <p>The anonymized text is analyzed by your chosen model, ensuring total data sovereignty.</p>
+                <h3>Review &amp; Chat</h3>
+                <p>Review all redactions, accept or dismiss suggestions, then chat securely with your chosen AI model. Responses are de-anonymized on-device.</p>
             </div>
         </div>
     </section>
@@ -141,17 +149,16 @@
     <footer id="download">
         <div class="footer-content glass-panel">
             <h2>Ready to secure your workflow?</h2>
-            <p>Download the latest DMG release and start anonymizing documents today.</p>
+            <p>Download the latest release and start anonymizing documents today.</p>
             <a href="https://github.com/rabahs/cloaklm/releases/latest" class="btn btn-primary glow-btn">Download Release</a>
         </div>
         <div class="footer-bottom">
-            <p>© 2026 CloakLM. Open Source.</p>
+            <p>&copy; 2026 CloakLM. Open Source.</p>
         </div>
     </footer>
 
     <!-- Simple interaction script -->
     <script>
-        // Micro-interaction: Parallax effect on mouse move for the hero frame
         document.addEventListener('mousemove', (e) => {
             const frame = document.querySelector('.hero-image-wrapper');
             const x = (window.innerWidth / 2 - e.pageX) / 50;

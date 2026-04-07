@@ -15,6 +15,7 @@ Usage (standalone):
 import re
 import json
 import argparse
+import unicodedata
 from pathlib import Path
 from datetime import datetime
 from rich.console import Console
@@ -189,10 +190,62 @@ class GLiNERAnonymizer:
 
         return text
 
+    @staticmethod
+    def _sanitize_unicode(text: str) -> str:
+        """Strip invisible Unicode characters that break regex and search.
+
+        PDF extractors (Docling/OCR) often inject zero-width spaces, soft
+        hyphens, RTL marks, and other invisible chars that:
+          - break regex patterns (email/SSN/phone won't match)
+          - break browser Ctrl+F search (user can't find the PII)
+          - but LLM tokenizers normalize them away and "read" the PII
+
+        This is the #1 cause of PII that "leaks" to the LLM but can't be
+        found in the Review Panel.
+        """
+        # Normalize to NFC (compose accented characters)
+        text = unicodedata.normalize("NFC", text)
+        # Strip zero-width and invisible formatting characters
+        _INVISIBLE = re.compile(
+            "["
+            "\u200b"  # zero-width space
+            "\u200c"  # zero-width non-joiner
+            "\u200d"  # zero-width joiner
+            "\u200e"  # left-to-right mark
+            "\u200f"  # right-to-left mark
+            "\u00ad"  # soft hyphen
+            "\u2060"  # word joiner
+            "\u2061"  # function application
+            "\u2062"  # invisible times
+            "\u2063"  # invisible separator
+            "\u2064"  # invisible plus
+            "\ufeff"  # BOM / zero-width no-break space
+            "\ufff9"  # interlinear annotation anchor
+            "\ufffa"  # interlinear annotation separator
+            "\ufffb"  # interlinear annotation terminator
+            "\u034f"  # combining grapheme joiner
+            "\u061c"  # Arabic letter mark
+            "\u115f"  # Hangul Choseong Filler
+            "\u1160"  # Hangul Jungseong Filler
+            "\u17b4"  # Khmer vowel inherent Aq
+            "\u17b5"  # Khmer vowel inherent Aa
+            "\u180e"  # Mongolian vowel separator
+            "]"
+        )
+        text = _INVISIBLE.sub("", text)
+        # Normalize whitespace: replace non-breaking spaces, thin spaces, etc.
+        text = re.sub(r"[\u00a0\u2000-\u200a\u202f\u205f\u3000]", " ", text)
+        return text
+
     def anonymize(self, text: str) -> str:
         """Detect and replace all PII using GLiNER."""
         if not isinstance(text, str) or not text.strip():
             return text
+
+        # CRITICAL: Sanitize invisible Unicode BEFORE any detection.
+        # Without this, PII hidden behind zero-width chars evades both
+        # GLiNER and regex, but LLMs still read it.
+        text = self._sanitize_unicode(text)
 
         # GLiNER has a max token limit. Process in chunks (by line groups)
         # to handle longer documents while preserving context.
@@ -240,8 +293,52 @@ class GLiNERAnonymizer:
         text = re.sub(r'\b[Xx]{3,}[-\s]?\d{4}\b', _acct, text)
         text = re.sub(r'\*{3,}\d{4}\b', _acct, text)
 
+        # Street addresses (123 Main Street, 4567 Oak Dr., etc.)
+        _STREET_SUFFIXES = (
+            r"Street|St\.?|Avenue|Ave\.?|Boulevard|Blvd\.?|Drive|Dr\.?|"
+            r"Road|Rd\.?|Lane|Ln\.?|Court|Ct\.?|Place|Pl\.?|Way|"
+            r"Circle|Cir\.?|Trail|Trl\.?|Terrace|Ter\.?|Parkway|Pkwy\.?"
+        )
+        _ADDR_PATTERN = re.compile(
+            rf'\b\d{{1,6}}\s+(?:[A-Z][a-zA-Z]*\.?\s+){{1,4}}(?:{_STREET_SUFFIXES})\b\.?',
+            re.IGNORECASE
+        )
+        def _addr(m):
+            if is_whitelisted(m.group()):
+                return m.group()
+            return self._get_placeholder(m.group(), "ADDRESS")
+        text = _ADDR_PATTERN.sub(_addr, text)
+
+        # City, State ZIP (e.g. "Springfield, IL 62704", "New York, NY 10001")
+        _CITY_STATE_ZIP = re.compile(
+            r'\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)\b'
+        )
+        def _csz(m):
+            if is_whitelisted(m.group()):
+                return m.group()
+            # Redact each part separately for granular mapping
+            city_state = self._get_placeholder(f"{m.group(1)}, {m.group(2)}", "CITY_STATE")
+            zip_code = self._get_placeholder(m.group(3), "ZIP")
+            return f"{city_state} {zip_code}"
+        text = _CITY_STATE_ZIP.sub(_csz, text)
+
+        # --- PARTIALLY-REDACTED EMAIL CLEANUP ---
+        # GLiNER often detects the name part of an email as PERSON,
+        # producing "[PERSON_4]@knl-cpa.com". The domain leaks the company.
+        # Catch these and redact the entire email.
+        def _partial_email(m):
+            return self._get_placeholder(m.group(), "EMAIL")
+        # [PLACEHOLDER]@domain.com  or  text[PLACEHOLDER]@domain.com
+        text = re.sub(
+            r'\S*\[[A-Z_]+\d*\]@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b',
+            _partial_email, text)
+        # user@[PLACEHOLDER].com  (less common but possible)
+        text = re.sub(
+            r'\b[A-Za-z0-9._%+-]+@\[[A-Z_]+\d*\]\.[A-Za-z]{2,}\b',
+            _partial_email, text)
+
         # --- FINAL GLOBAL REDACTION PASS ---
-        # Ensure any PII caught anywhere is redacted EVERYWHERE else, 
+        # Ensure any PII caught anywhere is redacted EVERYWHERE else,
         # protecting against chunking misses.
         text = self._global_redact_pass(text)
 
@@ -260,15 +357,31 @@ class GLiNERAnonymizer:
             placeholder = entry["placeholder"]
             all_tokens.append((real_val, placeholder))
             
-            # Add name fragments (only for multi-word strings)
+            # Add fragments for multi-word PII (names, orgs, AND addresses)
             parts = real_val.split()
             if len(parts) > 1:
                 category = entry.get("category", "").lower()
-                # Especially for names and organizations, fragments are dangerous
                 if "person" in category or "organization" in category or "org" in category:
                     for part in parts:
-                        if len(part) > 2: # Ignore initials/short words
+                        if len(part) > 2:  # Ignore initials/short words
                             all_tokens.append((part, placeholder))
+                elif "address" in category:
+                    # For addresses, redact the street name portion (not just the number)
+                    # e.g. "2037 Rosswood Drive" → also redact "Rosswood Drive", "Rosswood"
+                    non_numeric = [p for p in parts if not p.isdigit() and len(p) > 2]
+                    if non_numeric:
+                        # Add the full street name (without house number)
+                        street_name = " ".join(non_numeric)
+                        all_tokens.append((street_name, placeholder))
+                        # Add each significant word (skip common suffixes)
+                        _COMMON_SUFFIXES = {"street", "st", "avenue", "ave", "boulevard",
+                            "blvd", "drive", "dr", "road", "rd", "lane", "ln",
+                            "court", "ct", "place", "pl", "way", "circle", "cir",
+                            "trail", "trl", "terrace", "ter", "parkway", "pkwy"}
+                        for part in non_numeric:
+                            cleaned = part.rstrip(".,").lower()
+                            if cleaned not in _COMMON_SUFFIXES and len(part) > 2:
+                                all_tokens.append((part, placeholder))
 
         # 2. Sort by length (longest values first) to prevent partial replacements
         all_tokens = sorted(

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { LLMProvider, AppSettings } from "../types";
 
 interface SettingsViewProps {
@@ -231,6 +232,43 @@ export function SettingsView({ settings, onSave, isOllamaAvailable }: SettingsVi
                 </div>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Storage Location */}
+        <div className="mb-8">
+          <h2 className="text-sm font-bold text-text-primary mb-3 flex items-center gap-2">
+            💾 Document Storage
+          </h2>
+          <div className="bg-surface border border-border rounded-xl p-4">
+            <p className="text-xs text-text-secondary leading-relaxed mb-3">
+              Where anonymized project documents are stored on disk.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={draft.storageDir || "~/Documents/CloakLM"}
+                readOnly
+                className="flex-1 bg-surface-elevated border border-border rounded-lg px-3 py-2 text-xs font-mono text-text-primary outline-none"
+              />
+              <button
+                onClick={async () => {
+                  try {
+                    const selected = await open({ directory: true, title: "Choose storage location" });
+                    if (selected && typeof selected === "string") {
+                      setDraft((d) => ({ ...d, storageDir: selected }));
+                      setSaved(false);
+                    }
+                  } catch { /* user cancelled */ }
+                }}
+                className="px-3 py-2 bg-surface-elevated border border-border rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:border-primary/50 transition-all shrink-0"
+              >
+                Browse...
+              </button>
+            </div>
+            <p className="text-[10px] text-text-muted mt-2">
+              Default: ~/Documents/CloakLM
+            </p>
           </div>
         </div>
 

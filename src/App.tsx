@@ -16,7 +16,6 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { callLLM, deepScanWithLLM } from "./llm";
 import type { Message, Attachment, LLMProvider, AppSettings, AppView, ChatSession, Project } from "./types";
 import { loadSettingsStore, saveSettingsStore, loadChatSessions, saveChatSessions, loadProjects, saveProjects } from "./store";
-import { DocumentSidebar } from "./components/DocumentSidebar";
 
 const DEFAULT_SETTINGS: AppSettings = {
   provider: "claude",
@@ -31,7 +30,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   customModels: {
     claude: [], gemini: [], openai: [], ollama: []
   },
-  showDocsSidebar: false
 };
 
 function App() {
@@ -121,13 +119,6 @@ function App() {
     refreshAvailableProviders(newSettings);
   }, [refreshAvailableProviders]);
 
-  const handleToggleSidebar = useCallback(() => {
-    setSettings((prev) => {
-      const next = { ...prev, showDocsSidebar: !prev.showDocsSidebar };
-      saveSettingsStore(next);
-      return next;
-    });
-  }, []);
 
   const hasApiKey = provider === "ollama" || !!settings.apiKeys[provider as keyof typeof settings.apiKeys]?.trim();
 
@@ -566,12 +557,11 @@ function App() {
       if (isMod && e.key === "n") { e.preventDefault(); handleNewChat(); }
       else if (isMod && e.key === ",") { e.preventDefault(); setActiveView("settings"); }
       else if (isMod && e.key === "h") { e.preventDefault(); setActiveView("history"); }
-      else if (isMod && e.key === "d") { e.preventDefault(); handleToggleSidebar(); }
       else if (isMod && e.key === "p") { e.preventDefault(); setActiveView("projects"); }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleNewChat, handleToggleSidebar]);
+  }, [handleNewChat]);
 
   // --- Render views ---
   const activeProject = projects.find(p => p.id === activeProjectId) || null;
@@ -647,46 +637,56 @@ function App() {
             <ChatHeader
               onNewChat={handleNewChat}
               hasMessages={messages.length > 0}
-              isSidebarOpen={!!settings.showDocsSidebar}
-              onToggleSidebar={handleToggleSidebar}
               onExport={handleExport}
               docCount={Object.keys(historyAttachments).length}
             />
 
-            <div className="flex-1 flex overflow-hidden">
-              <main className="flex-1 overflow-hidden flex flex-col relative">
-                {engineStatus === 'loading' && (
-                  <div className="absolute top-0 left-0 right-0 bg-primary/10 border-b border-primary/20 p-2 text-center text-sm text-primary animate-pulse z-10">
-                    🛡️ CloakLM Shield is initializing AI models... (30-40 seconds)
-                  </div>
-                )}
-                {isLoading && (
-                  <div className="p-4 flex items-center justify-center gap-3 text-text-muted animate-pulse border-t border-border bg-surface/50">
-                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]" />
-                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]" />
-                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
-                    <span className="text-xs font-medium ml-2">CloakLM is thinking...</span>
-                    <div className="flex items-center gap-2 ml-4">
-                      <span className="text-[10px] uppercase tracking-widest bg-success/10 text-success px-2 py-0.5 rounded-full border border-success/20 font-bold">🛡️ Sentinel Firewall</span>
-                      {Object.keys(historyAttachments).length > 0 && (
-                        <span className="text-[10px] uppercase tracking-widest bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20 font-bold animate-pulse">
-                          📄 {Object.keys(historyAttachments).length} Docs Indexed
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {engineStatus === 'error' && (
-                  <div className="absolute top-0 left-0 right-0 bg-red-500/10 border-b border-red-500/20 p-2 text-center text-sm text-red-500 z-10">
-                    ⚠️ AI Engine failed to start. Please restart the application.
-                  </div>
-                )}
-                {messages.length === 0 ? <WelcomeScreen /> : <MessageList messages={messages} isLoading={isLoading} />}
-              </main>
-              {settings.showDocsSidebar && (
-                <DocumentSidebar documents={Object.values(historyAttachments)} onReview={setReviewingAttachment} onClose={handleToggleSidebar} />
+            <main className="flex-1 overflow-hidden flex flex-col relative">
+              {engineStatus === 'loading' && (
+                <div className="absolute top-0 left-0 right-0 bg-primary/10 border-b border-primary/20 p-2 text-center text-sm text-primary animate-pulse z-10">
+                  🛡️ CloakLM Shield is initializing AI models... (30-40 seconds)
+                </div>
               )}
-            </div>
+              {isLoading && (
+                <div className="p-4 flex items-center justify-center gap-3 text-text-muted animate-pulse border-t border-border bg-surface/50">
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]" />
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]" />
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
+                  <span className="text-xs font-medium ml-2">CloakLM is thinking...</span>
+                  <div className="flex items-center gap-2 ml-4">
+                    <span className="text-[10px] uppercase tracking-widest bg-success/10 text-success px-2 py-0.5 rounded-full border border-success/20 font-bold">🛡️ Sentinel Firewall</span>
+                    {Object.keys(historyAttachments).length > 0 && (
+                      <span className="text-[10px] uppercase tracking-widest bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20 font-bold animate-pulse">
+                        📄 {Object.keys(historyAttachments).length} Docs Indexed
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {engineStatus === 'error' && (
+                <div className="absolute top-0 left-0 right-0 bg-red-500/10 border-b border-red-500/20 p-2 text-center text-sm text-red-500 z-10">
+                  ⚠️ AI Engine failed to start. Please restart the application.
+                </div>
+              )}
+              {messages.length === 0 ? (
+                <WelcomeScreen
+                  projects={projects}
+                  onOpenProject={handleOpenProject}
+                  onStartProjectChat={(projectId) => { setActiveProjectId(projectId); setActiveView("project-detail"); }}
+                  onCreateProject={(name) => {
+                    const id = crypto.randomUUID();
+                    const newProject = { id, name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), attachments: {} };
+                    const updated = [newProject, ...projects];
+                    setProjects(updated);
+                    saveProjects(updated);
+                    setActiveProjectId(id);
+                    setActiveView("project-detail");
+                  }}
+                />
+              ) : (
+                <MessageList messages={messages} isLoading={isLoading} />
+              )}
+            </main>
 
             <ChatInput
               onSend={sendMessage}
@@ -694,6 +694,11 @@ function App() {
               onRemoveAttachment={removeAttachment}
               onReviewAttachment={setReviewingAttachment}
               onAttachFiles={handleFiles}
+              onAttachProjectDoc={(doc) => {
+                setHistoryAttachments(prev => ({ ...prev, [doc.id]: doc }));
+                setAttachments(prev => [...prev, doc]);
+              }}
+              projects={projects}
               isLoading={isLoading}
               provider={provider}
               activeModel={settings.activeModels?.[provider] || ""}

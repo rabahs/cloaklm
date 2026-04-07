@@ -45,6 +45,7 @@ export function ProjectDetailView({
 
   // Chat state
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [composingNewChat, setComposingNewChat] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeAttachmentIds, setActiveAttachmentIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -66,6 +67,7 @@ export function ProjectDetailView({
 
   const startNewChat = useCallback(() => {
     setActiveChatId(null);
+    setComposingNewChat(true);
     setMessages([]);
     setActiveAttachmentIds(Object.keys(project.attachments));
     setTab("chats");
@@ -314,7 +316,7 @@ export function ProjectDetailView({
     }
   };
 
-  const showChatList = tab === "chats" && activeChatId === null && messages.length === 0 && !isLoading;
+  const showChatList = tab === "chats" && activeChatId === null && messages.length === 0 && !isLoading && !composingNewChat;
 
   return (
     <div
@@ -331,7 +333,7 @@ export function ProjectDetailView({
       >
         <div className="flex items-center gap-2.5" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
           <button
-            onClick={activeChatId ? () => { setActiveChatId(null); setMessages([]); } : onBack}
+            onClick={activeChatId || composingNewChat ? () => { setActiveChatId(null); setComposingNewChat(false); setMessages([]); } : onBack}
             className="text-text-muted hover:text-text-primary transition-colors text-sm mr-1"
             title="Back"
           >
@@ -344,7 +346,7 @@ export function ProjectDetailView({
         <div className="flex items-center gap-1" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
           {/* Tabs */}
           <button
-            onClick={() => { setTab("documents"); setActiveChatId(null); setMessages([]); }}
+            onClick={() => { setTab("documents"); setActiveChatId(null); setComposingNewChat(false); setMessages([]); }}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
               tab === "documents"
                 ? "bg-primary/15 text-primary"

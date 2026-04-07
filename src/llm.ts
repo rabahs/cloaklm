@@ -40,70 +40,114 @@ export function getProviderIcon(provider: LLMProvider): string {
   return icons[provider];
 }
 
-// High-speed, single-pass PII anonymizer
+// Strip invisible Unicode that PDF extractors inject.
+// Without this, PII hidden behind zero-width chars evades regex but LLMs read it.
+function sanitizeUnicode(text: string): string {
+  // Strip zero-width / invisible formatting characters
+  text = text.replace(/[\u200b\u200c\u200d\u200e\u200f\u00ad\u2060-\u2064\ufeff\ufff9-\ufffb\u034f\u061c\u115f\u1160\u17b4\u17b5\u180e]/g, "");
+  // Normalize exotic whitespace to plain space
+  text = text.replace(/[\u00a0\u2000-\u200a\u202f\u205f\u3000]/g, " ");
+  // NFC normalization (compose accented chars)
+  return text.normalize("NFC");
+}
+
+// Regex safety net patterns — independent of what the sidecar caught.
+// These run on every outbound prompt as a last line of defense.
+const SAFETY_NET_PATTERNS: { pattern: RegExp; placeholder: string }[] = [
+  // Partially-redacted emails: [PERSON_4]@knl-cpa.com → full redaction
+  { pattern: /\S*\[[A-Z_]+\d*\]@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, placeholder: "[EMAIL_REDACTED]" },
+  // Emails
+  { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, placeholder: "[EMAIL_REDACTED]" },
+  // SSNs (123-45-6789, 123 45 6789)
+  { pattern: /\b\d{3}[-\s]\d{2}[-\s]\d{4}\b/g, placeholder: "[SSN_REDACTED]" },
+  // Phone numbers
+  { pattern: /\b(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b/g, placeholder: "[PHONE_REDACTED]" },
+  // Street addresses (123 Main Street, 4567 Oak Dr.)
+  { pattern: /\b\d{1,6}\s+(?:[A-Z][a-zA-Z]*\.?\s+){1,4}(?:Street|St\.?|Avenue|Ave\.?|Boulevard|Blvd\.?|Drive|Dr\.?|Road|Rd\.?|Lane|Ln\.?|Court|Ct\.?|Place|Pl\.?|Way|Circle|Cir\.?|Trail|Trl\.?|Terrace|Ter\.?|Parkway|Pkwy\.?)\b\.?/gi, placeholder: "[ADDRESS_REDACTED]" },
+  // City, State ZIP
+  { pattern: /\b[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*,\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/g, placeholder: "[LOCATION_REDACTED]" },
+];
+
+// High-speed, multi-layer PII anonymizer for outbound prompts
 export function anonymizePrompt(text: string, attachments: Attachment[]): string {
-  if (!text || !attachments.length) return text;
+  if (!text) return text;
 
-  // 1. Build a unique set of all PII tokens to redact
-  const tokenMap = new Map<string, string>(); // real_value -> placeholder
-  
-  attachments.forEach(att => {
-    // Also redact original and anonymized filenames to be safe
-    // We fragment them too so that "Mariam" is redacted even if the filename is "Mariam_Taxes.pdf"
-    [att.fileName, att.anonymizedFileName].forEach(name => {
-      if (!name) return;
-      tokenMap.set(name.toLowerCase(), "[FILE_NAME]");
-      const parts = name.split(/[\s,._-]+/);
-      if (parts.length > 1) {
-        parts.forEach(p => {
-          const part = p.replace(/\.[^/.]+$/, ""); // Strip extension
-          if (part.length > 3) tokenMap.set(part.toLowerCase(), "[FILE_NAME]");
-        });
-      }
+  // Layer 0: Strip invisible Unicode BEFORE any pattern matching.
+  // This is the root cause of "LLM sees PII that search can't find".
+  text = sanitizeUnicode(text);
+
+  // --- Layer 1: Redaction-map-based replacement (what the sidecar caught) ---
+  if (attachments.length > 0) {
+    // 1. Build a unique set of all PII tokens to redact
+    const tokenMap = new Map<string, string>(); // real_value -> placeholder
+
+    attachments.forEach(att => {
+      // Also redact original and anonymized filenames to be safe
+      [att.fileName, att.anonymizedFileName].forEach(name => {
+        if (!name) return;
+        tokenMap.set(name.toLowerCase(), "[FILE_NAME]");
+        const parts = name.split(/[\s,._-]+/);
+        if (parts.length > 1) {
+          parts.forEach(p => {
+            const part = p.replace(/\.[^/.]+$/, ""); // Strip extension
+            if (part.length > 3) tokenMap.set(part.toLowerCase(), "[FILE_NAME]");
+          });
+        }
+      });
+
+      if (!att.redactionMap) return;
+      Object.values(att.redactionMap).forEach(entry => {
+        const real = entry.real_value.trim().toLowerCase();
+        if (real.length < 3) return;
+
+        tokenMap.set(real, entry.placeholder);
+
+        // Force fragment redaction for ALL categories (Safety First)
+        const parts = real.split(/[\s,.-]+/);
+        if (parts.length > 1) {
+          parts.forEach(p => {
+            if (p.length > 3) {
+              tokenMap.set(p.toLowerCase(), entry.placeholder);
+            }
+          });
+        }
+      });
     });
 
-    if (!att.redactionMap) return;
-    Object.values(att.redactionMap).forEach(entry => {
-      const real = entry.real_value.trim().toLowerCase();
-      if (real.length < 3) return; // Ignore very short bits
-      
-      tokenMap.set(real, entry.placeholder);
-      
-      // Force fragment redaction for ALL categories (Safety First)
-      const parts = real.split(/[\s,.-]+/);
-      if (parts.length > 1) {
-        parts.forEach(p => {
-          if (p.length > 3) {
-            tokenMap.set(p.toLowerCase(), entry.placeholder);
-          }
-        });
-      }
+    if (tokenMap.size > 0) {
+      // Sort longest first to prioritize "John Doe" over "John"
+      const sortedTokens = Array.from(tokenMap.keys()).sort((a, b) => b.length - a.length);
+      const regexPattern = sortedTokens
+        .map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .join('|');
+      const regex = new RegExp(`(${regexPattern})`, 'gi');
+
+      text = text.replace(regex, (match) => {
+        return tokenMap.get(match.toLowerCase()) || match;
+      });
+    }
+  }
+
+  // --- Layer 2: Regex safety net (catches anything the sidecar missed) ---
+  // This is the LAST line of defense before content leaves the device.
+  for (const { pattern, placeholder } of SAFETY_NET_PATTERNS) {
+    // Reset lastIndex for global regexes
+    pattern.lastIndex = 0;
+    text = text.replace(pattern, (match) => {
+      // Don't re-redact things already in brackets
+      if (/^\[.*\]$/.test(match)) return match;
+      return placeholder;
     });
-  });
+  }
 
-  if (tokenMap.size === 0) return text;
-
-  // 2. Build a single optimized Regex for all tokens
-  // Sort longest first to prioritize "John Doe" over "John"
-  const sortedTokens = Array.from(tokenMap.keys()).sort((a, b) => b.length - a.length);
-  const regexPattern = sortedTokens
-    .map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    .join('|');
-  const regex = new RegExp(`(${regexPattern})`, 'gi');
-
-  // 3. Single-pass replacement
-  const result = text.replace(regex, (match) => {
-    return tokenMap.get(match.toLowerCase()) || match;
-  });
-
-  return result;
+  return text;
 }
 
 // Build the system prompt with anonymized document context
 function buildSystemPrompt(attachments: Attachment[]): string {
   const docs = attachments
     .filter((a) => a.status === "ready" && a.anonymizedContent)
-    .map((a, i) => `[DOCUMENT_${i + 1}_CONTENT]:\n${a.anonymizedContent}`)
+    .map((a, i) => `[DOCUMENT_${i + 1}_CONTENT]:\n${sanitizeUnicode(a.anonymizedContent!)}`)
     .join("\n\n");
 
   if (!docs) return "Factual Analysis Mode.";

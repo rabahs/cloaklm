@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import type { Attachment, LLMProvider } from "../types";
+import type { Attachment, LLMProvider, Project } from "../types";
 import { AttachmentChip } from "./AttachmentChip";
 import { UnifiedModelSelector } from "./UnifiedModelSelector";
+import { ProjectDocPicker } from "./ProjectDocPicker";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -9,8 +10,10 @@ interface ChatInputProps {
   onRemoveAttachment: (id: string) => void;
   onReviewAttachment: (attachment: Attachment) => void;
   onAttachFiles?: (files: File[]) => void;
+  onAttachProjectDoc?: (doc: Attachment) => void;
+  projects?: Project[];
   isLoading: boolean;
-  
+
   // Model Selector Props
   provider: LLMProvider;
   activeModel: string;
@@ -27,6 +30,8 @@ export function ChatInput({
   onRemoveAttachment,
   onReviewAttachment,
   onAttachFiles,
+  onAttachProjectDoc,
+  projects,
   isLoading,
   provider,
   activeModel,
@@ -37,11 +42,18 @@ export function ChatInput({
   onAddCustomModel
 }: ChatInputProps) {
   const [input, setInput] = useState("");
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [showDocPicker, setShowDocPicker] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const canSend = (input.trim().length > 0 || attachments.length > 0) && !isLoading;
   const isAnonymizing = attachments.some(a => a.status === 'anonymizing');
+
+  const hasProjectDocs = projects?.some(p =>
+    Object.values(p.attachments).some(a => a.status === "ready")
+  );
 
   // Auto-resize textarea
   useEffect(() => {
@@ -53,6 +65,18 @@ export function ChatInput({
       )}px`;
     }
   }, [input]);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!showAttachMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowAttachMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showAttachMenu]);
 
   const handleSubmit = () => {
     if (canSend && !isAnonymizing) {
@@ -74,8 +98,15 @@ export function ChatInput({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && onAttachFiles) {
       onAttachFiles(Array.from(e.target.files));
-      // Reset input so the same file can be selected again if removed
       e.target.value = "";
+    }
+  };
+
+  const handleAttachClick = () => {
+    if (hasProjectDocs) {
+      setShowAttachMenu(!showAttachMenu);
+    } else {
+      fileInputRef.current?.click();
     }
   };
 
@@ -83,7 +114,7 @@ export function ChatInput({
     <div className="bg-surface border-t border-border px-4 py-4 pb-6 relative z-10">
       <div className="max-w-3xl mx-auto">
         <div className="bg-surface-elevated border border-border rounded-xl shadow-lg flex flex-col focus-within:border-primary/50 transition-colors">
-          
+
           {/* Attachments Section */}
           {attachments.length > 0 && (
             <div className="flex gap-2 p-3 pb-0 overflow-x-auto">
@@ -100,21 +131,57 @@ export function ChatInput({
 
           {/* Input Area */}
           <div className="flex items-end gap-2 p-3">
-            <input 
-              type="file" 
-              multiple 
-              accept="application/pdf,.pdf" 
-              className="hidden" 
+            <input
+              type="file"
+              multiple
+              accept="application/pdf,.pdf"
+              className="hidden"
               ref={fileInputRef}
               onChange={handleFileChange}
             />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-10 h-10 rounded-lg flex items-center justify-center text-text-secondary hover:text-primary hover:bg-primary/10 transition-colors focus:outline-none"
-              title="Attach File"
-            >
-              📎
-            </button>
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={handleAttachClick}
+                className="w-10 h-10 rounded-lg flex items-center justify-center text-text-secondary hover:text-primary hover:bg-primary/10 transition-colors focus:outline-none"
+                title="Attach File"
+              >
+                📎
+              </button>
+
+              {/* Attach popover menu */}
+              {showAttachMenu && (
+                <div className="absolute bottom-12 left-0 bg-surface-elevated border border-border rounded-xl shadow-2xl py-1.5 min-w-[200px] animate-view-enter z-20">
+                  <button
+                    onClick={() => {
+                      setShowAttachMenu(false);
+                      fileInputRef.current?.click();
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-text-primary hover:bg-surface-hover transition-colors text-left"
+                  >
+                    <span className="text-base">📄</span>
+                    <div>
+                      <div className="font-medium">Upload new PDF</div>
+                      <div className="text-[10px] text-text-muted">Select a file from your device</div>
+                    </div>
+                  </button>
+                  <div className="border-t border-border mx-2 my-1" />
+                  <button
+                    onClick={() => {
+                      setShowAttachMenu(false);
+                      setShowDocPicker(true);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-text-primary hover:bg-surface-hover transition-colors text-left"
+                  >
+                    <span className="text-base">📁</span>
+                    <div>
+                      <div className="font-medium">From project...</div>
+                      <div className="text-[10px] text-text-muted">Attach an already-redacted document</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+
             <textarea
               ref={textareaRef}
               value={input}
@@ -159,6 +226,15 @@ export function ChatInput({
           </span>
         </div>
       </div>
+
+      {/* Project Document Picker Modal */}
+      {showDocPicker && projects && onAttachProjectDoc && (
+        <ProjectDocPicker
+          projects={projects}
+          onSelect={onAttachProjectDoc}
+          onClose={() => setShowDocPicker(false)}
+        />
+      )}
     </div>
   );
 }

@@ -24,8 +24,37 @@
     <!-- Canonical URL -->
     <link rel="canonical" href="https://cloaklm.com/">
 
+    <!-- Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "CloakLM",
+        "applicationCategory": "SecurityApplication",
+        "operatingSystem": "macOS, Windows",
+        "url": "https://cloaklm.com",
+        "downloadUrl": "https://github.com/rabahs/cloaklm/releases/latest",
+        "description": "Private AI desktop app with multi-pass PII redaction. Chat with sensitive PDFs safely by redacting personally identifiable information locally before sending to Claude, OpenAI, Gemini, or local models.",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "screenshot": "https://cloaklm.com/assets/app_demo.png",
+        "softwareHelp": {
+            "@type": "WebPage",
+            "url": "https://github.com/rabahs/cloaklm"
+        },
+        "author": {
+            "@type": "Organization",
+            "name": "BitHunch LLC"
+        }
+    }
+    </script>
+
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="assets/logo.png">
+    <link rel="apple-touch-icon" href="assets/logo.png">
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -41,14 +70,14 @@
     <div class="glow-orb orb-2"></div>
     <div class="glow-orb orb-3"></div>
 
-    <nav class="navbar">
-        <div class="logo">
-            <img src="assets/logo.png" alt="CloakLM Logo" class="icon-img"> CloakLM
-        </div>
+    <nav class="navbar" aria-label="Main navigation">
+        <a href="/" class="logo">
+            <img src="assets/logo.png" alt="CloakLM Logo" class="icon-img" width="32" height="32"> CloakLM
+        </a>
         <div class="nav-links">
             <a href="#features">Features</a>
             <a href="#how-it-works">How It Works</a>
-            <a href="https://github.com/rabahs/cloaklm" class="btn btn-outline" target="_blank">View on GitHub</a>
+            <a href="https://github.com/rabahs/cloaklm" class="btn btn-outline" target="_blank" rel="noopener">View on GitHub</a>
         </div>
     </nav>
 

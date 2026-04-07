@@ -3,8 +3,6 @@
 interface ChatHeaderProps {
   onNewChat: () => void;
   hasMessages: boolean;
-  isSidebarOpen: boolean;
-  onToggleSidebar: () => void;
   onExport: () => void;
   docCount: number;
 }
@@ -12,8 +10,6 @@ interface ChatHeaderProps {
 export function ChatHeader({
   onNewChat,
   hasMessages,
-  isSidebarOpen,
-  onToggleSidebar,
   onExport,
   docCount,
 }: ChatHeaderProps) {
@@ -36,46 +32,28 @@ export function ChatHeader({
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
       >
         {hasMessages && (
-          <button
-            onClick={onNewChat}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-border rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:border-primary/50 transition-all"
-            title="New conversation (Cmd+N)"
-          >
-            ✨ New Chat
-          </button>
+          <>
+            {docCount > 0 && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1.5 bg-primary/10 border border-primary/20 rounded-lg text-[10px] font-bold text-primary uppercase tracking-wider">
+                📄 {docCount} docs
+              </span>
+            )}
+            <button
+              onClick={onExport}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-border rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:border-primary/50 transition-all"
+              title="Export transcript"
+            >
+              📤 Export
+            </button>
+            <button
+              onClick={onNewChat}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-border rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:border-primary/50 transition-all"
+              title="New conversation (Cmd+N)"
+            >
+              ✨ New Chat
+            </button>
+          </>
         )}
-
-        {hasMessages && (
-          <button
-            onClick={onExport}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-border rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:border-primary/50 transition-all"
-            title="Export transcript"
-          >
-            📤 Export
-          </button>
-        )}
-
-        <button
-          onClick={onToggleSidebar}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-            isSidebarOpen
-              ? "bg-primary/10 border-primary/30 text-primary"
-              : "bg-surface border-border text-text-secondary hover:text-text-primary hover:border-primary/50"
-          }`}
-          title={
-            isSidebarOpen
-              ? "Close Documents Sidebar (Cmd+D)"
-              : "Open Documents Sidebar (Cmd+D)"
-          }
-        >
-          <span>📄</span>
-          <span>Docs</span>
-          {docCount > 0 && (
-            <span className="flex items-center justify-center min-w-[18px] h-[18px] bg-primary text-white text-[10px] font-bold rounded-full px-1">
-              {docCount}
-            </span>
-          )}
-        </button>
       </div>
     </header>
   );

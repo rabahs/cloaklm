@@ -76,6 +76,14 @@
 - [x] Pipeline summary dashboard with per-pass counts
 - [x] Status badges show current pass during processing
 
+## Milestone 10 — UX Overhaul & Storage Settings
+- [x] Redesigned Welcome Screen with project quick-access (recent projects, one-click chat)
+- [x] Removed legacy Documents sidebar from standalone chat (attachment chips are sufficient)
+- [x] Attach-from-project: paperclip menu lets users attach already-redacted project docs to any chat
+- [x] ProjectDocPicker modal with expandable project list and ready-doc selection
+- [x] Configurable document storage directory in Settings (default: ~/Documents/CloakLM)
+- [x] Updated landing page with multi-pass redaction, project management, and review features
+
 ## Planned
 - [ ] Drag documents between projects
 - [ ] Duplicate projects

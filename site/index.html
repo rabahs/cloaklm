@@ -27,7 +27,7 @@
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="assets/logo.png">
 
-    <!-- Google Fonts for Modern Typography -->
+    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
@@ -52,100 +52,169 @@
         </div>
     </nav>
 
+    <!-- ======== HERO ======== -->
     <header class="hero">
         <div class="hero-content">
             <div class="badge" id="version-badge">Loading...</div>
             <script>
                 fetch('https://api.github.com/repos/rabahs/cloaklm/releases/latest')
-                    .then(response => response.json())
-                    .then(data => {
-                        const version = data.tag_name || 'v0.4';
-                        document.getElementById('version-badge').textContent = `${version} Now Live`;
-                    })
-                    .catch(() => {
-                        document.getElementById('version-badge').textContent = 'v0.4 Now Live';
-                    });
+                    .then(r => r.json())
+                    .then(d => { document.getElementById('version-badge').textContent = `${d.tag_name || 'v0.4.0'} Now Live`; })
+                    .catch(() => { document.getElementById('version-badge').textContent = 'v0.4.0 Now Live'; });
             </script>
             <h1>Securely Chat with <br><span class="gradient-text">Sensitive PDF Documents.</span></h1>
             <p>CloakLM is a <strong>private AI desktop app</strong> with multi-pass PII redaction, project-based document management, and support for Claude, OpenAI, Gemini, or fully local models. Your PII never leaves your machine.</p>
             <div class="cta-group">
-                <a href="#download" class="btn btn-primary" title="Download CloakLM for macOS">Download for macOS</a>
-                <a href="#features" class="btn btn-secondary" title="Learn about CloakLM Features">Explore Features</a>
+                <a href="#download" class="btn btn-primary">Download for macOS</a>
+                <a href="#features" class="btn btn-secondary">Explore Features</a>
             </div>
         </div>
 
         <div class="hero-image-wrapper">
             <div class="glass-frame">
-                <img src="assets/app_demo.png" alt="CloakLM Application Interface Demo" class="app-mockup">
+                <img src="assets/app_demo.png" alt="CloakLM Application Interface" class="app-mockup">
             </div>
         </div>
     </header>
 
-    <section id="features" class="features-section">
+    <!-- ======== FEATURE SHOWCASES ======== -->
+    <section id="features" class="showcases">
         <div class="section-title">
-            <h2>Why Choose CloakLM for Document Privacy?</h2>
-            <p>Enterprise-grade PII redaction and document management for secure AI workflows.</p>
+            <h2>Built for Document Privacy</h2>
+            <p>Every feature designed around one principle: your PII never leaves your device.</p>
         </div>
 
-        <div class="feature-grid">
-            <div class="feature-card glass-panel">
-                <div class="feature-icon">🧠</div>
-                <h3>Multi-Pass PII Redaction</h3>
-                <p>Pass 1: GLiNER + IBM Docling scan locally. Pass 2: Optional deep scan with a local Ollama LLM catches what rule-based models miss. No PII ever leaves your device.</p>
+        <!-- Feature 1: Welcome + Projects -->
+        <div class="showcase">
+            <div class="showcase-text">
+                <div class="showcase-label">Project Management</div>
+                <h3>Organize Documents &amp; Conversations</h3>
+                <p>Group related PDFs into projects. Start multiple chats against the same document set, and pick exactly which docs provide context for each conversation.</p>
+                <ul class="showcase-list">
+                    <li>Create, rename, and manage projects from the welcome screen</li>
+                    <li>One-click to open a project or jump straight into a chat</li>
+                    <li>Toggle individual documents in/out of LLM context per chat</li>
+                </ul>
             </div>
-            <div class="feature-card glass-panel">
-                <div class="feature-icon">📁</div>
-                <h3>Project Management</h3>
-                <p>Organize documents into projects. Add multiple PDFs, run multiple chats against the same document set, and toggle which docs are in context per conversation.</p>
+            <div class="showcase-image">
+                <div class="glass-frame">
+                    <img src="assets/screenshot_projects.png" alt="Project management view showing document organization">
+                </div>
             </div>
-            <div class="feature-card glass-panel">
-                <div class="feature-icon">🔑</div>
-                <h3>BYOK &mdash; Bring Your Own Key</h3>
-                <p>Connect your own API keys for Claude, Gemini, OpenAI, or run 100% offline with local models via Ollama. You own your data flow.</p>
+        </div>
+
+        <!-- Feature 2: Multi-Pass Redaction -->
+        <div class="showcase showcase-reverse">
+            <div class="showcase-text">
+                <div class="showcase-label">Multi-Pass Redaction</div>
+                <h3>Two AI Passes. Zero PII Leaks.</h3>
+                <p>Pass 1 uses GLiNER + IBM Docling to scan locally in seconds. Pass 2 deploys a local Ollama LLM to catch what rule-based models miss &mdash; names in unusual formats, partial SSNs, addresses without standard suffixes.</p>
+                <ul class="showcase-list">
+                    <li>GLiNER NER + regex patterns for structured PII (SSN, EIN, email, phone, address)</li>
+                    <li>Optional deep scan with local Ollama model for contextual detection</li>
+                    <li>Client-side safety net catches anything that slips through both passes</li>
+                </ul>
             </div>
-            <div class="feature-card glass-panel">
-                <div class="feature-icon">🛡️</div>
-                <h3>Review &amp; Control</h3>
-                <p>Review every redaction before sending. Accept or dismiss AI suggestions, manually redact additional text, and see provenance badges showing which pass found each PII.</p>
+            <div class="showcase-image">
+                <div class="glass-frame">
+                    <img src="assets/screenshot_redaction.png" alt="Document being anonymized with redaction badges">
+                </div>
             </div>
-            <div class="feature-card glass-panel">
-                <div class="feature-icon">📄</div>
-                <h3>Deep PDF Analysis</h3>
-                <p>Extracts layouts, tables, and complex formatting from PDFs. Attach already-redacted project docs to any chat &mdash; no re-processing needed.</p>
+        </div>
+
+        <!-- Feature 3: Review Panel -->
+        <div class="showcase">
+            <div class="showcase-text">
+                <div class="showcase-label">Review &amp; Control</div>
+                <h3>Inspect Every Redaction Before Sending</h3>
+                <p>The Review Panel shows exactly what was redacted and by which pass. Accept or dismiss deep scan suggestions, manually redact additional text by selecting it, and see the raw anonymized output the LLM will receive.</p>
+                <ul class="showcase-list">
+                    <li>Provenance badges: GLiNER (auto), Deep Scan (AI), Manual (you)</li>
+                    <li>Select any text and click "Redact" to add manual redactions</li>
+                    <li>Search the raw output to verify nothing was missed</li>
+                </ul>
             </div>
-            <div class="feature-card glass-panel">
-                <div class="feature-icon">🔒</div>
-                <h3>Secure by Design</h3>
-                <p>Anonymized entities (e.g., [PERSON_1]) are restored on-device. API keys stored locally via encrypted Tauri store. No middleman servers, ever.</p>
+            <div class="showcase-image">
+                <div class="glass-frame">
+                    <img src="assets/screenshot_review.png" alt="Review panel showing redaction list and raw output">
+                </div>
+            </div>
+        </div>
+
+        <!-- Feature 4: Chat with De-anonymization -->
+        <div class="showcase showcase-reverse">
+            <div class="showcase-text">
+                <div class="showcase-label">Secure Chat</div>
+                <h3>The LLM Sees Placeholders. You See Real Names.</h3>
+                <p>When the AI responds, CloakLM replaces [PERSON_1] with the real name on your screen &mdash; but the LLM never saw it. Switch between Claude, Gemini, OpenAI, or local Ollama models mid-conversation.</p>
+                <ul class="showcase-list">
+                    <li>De-anonymization happens 100% on-device at render time</li>
+                    <li>Provider badge on every response shows which model answered</li>
+                    <li>Full conversation history with export to Markdown</li>
+                </ul>
+            </div>
+            <div class="showcase-image">
+                <div class="glass-frame">
+                    <img src="assets/screenshot_chat.png" alt="Chat interface with de-anonymized AI responses">
+                </div>
+            </div>
+        </div>
+
+        <!-- Feature 5: BYOK Settings -->
+        <div class="showcase">
+            <div class="showcase-text">
+                <div class="showcase-label">Bring Your Own Key</div>
+                <h3>Your Keys, Your Models, Your Rules</h3>
+                <p>Connect API keys for Claude, Gemini, or OpenAI &mdash; or run fully offline with Ollama. Keys are stored in an encrypted local store and connect directly to providers. No middleman server, ever.</p>
+                <ul class="showcase-list">
+                    <li>Four providers: Anthropic Claude, Google Gemini, OpenAI, Ollama (local)</li>
+                    <li>Deep Scan model picker auto-discovers installed Ollama models</li>
+                    <li>Configurable document storage directory</li>
+                </ul>
+            </div>
+            <div class="showcase-image">
+                <div class="glass-frame">
+                    <img src="assets/screenshot_settings.png" alt="Settings view with API key configuration">
+                </div>
             </div>
         </div>
     </section>
 
+    <!-- ======== HOW IT WORKS ======== -->
     <section id="how-it-works" class="features-section" style="padding-top: 0;">
         <div class="section-title">
             <h2>How CloakLM Secures Your Documents</h2>
-            <p>A multi-pass pipeline ensures nothing slips through.</p>
+            <p>A multi-layer pipeline ensures nothing slips through.</p>
         </div>
 
-        <div class="feature-grid" style="text-align: center;">
-            <div class="feature-card glass-panel">
-                <div class="feature-icon" style="font-size: 3rem; background: transparent; border: none; box-shadow: none;">1️⃣</div>
+        <div class="pipeline">
+            <div class="pipeline-step glass-panel">
+                <div class="pipeline-number">1</div>
                 <h3>Upload &amp; Organize</h3>
-                <p>Drop PDFs into a quick chat or organize them into projects for ongoing work with multiple conversations.</p>
+                <p>Drop PDFs into a quick chat or organize them into projects for ongoing work.</p>
             </div>
-            <div class="feature-card glass-panel">
-                <div class="feature-icon" style="font-size: 3rem; background: transparent; border: none; box-shadow: none;">2️⃣</div>
+            <div class="pipeline-arrow">&rarr;</div>
+            <div class="pipeline-step glass-panel">
+                <div class="pipeline-number">2</div>
                 <h3>Multi-Pass Redaction</h3>
-                <p>Pass 1 (GLiNER) runs instantly. Enable Pass 2 (Deep Scan) for a local LLM to catch names, addresses, and fragments the first pass missed.</p>
+                <p>GLiNER + regex (instant), then optional local LLM deep scan for contextual PII.</p>
             </div>
-            <div class="feature-card glass-panel">
-                <div class="feature-icon" style="font-size: 3rem; background: transparent; border: none; box-shadow: none;">3️⃣</div>
-                <h3>Review &amp; Chat</h3>
-                <p>Review all redactions, accept or dismiss suggestions, then chat securely with your chosen AI model. Responses are de-anonymized on-device.</p>
+            <div class="pipeline-arrow">&rarr;</div>
+            <div class="pipeline-step glass-panel">
+                <div class="pipeline-number">3</div>
+                <h3>Review &amp; Approve</h3>
+                <p>Inspect every redaction. Accept, dismiss, or manually add more before sending.</p>
+            </div>
+            <div class="pipeline-arrow">&rarr;</div>
+            <div class="pipeline-step glass-panel">
+                <div class="pipeline-number">4</div>
+                <h3>Secure Chat</h3>
+                <p>Anonymized text goes to the LLM. Responses are de-anonymized on your device.</p>
             </div>
         </div>
     </section>
 
+    <!-- ======== FOOTER / DOWNLOAD ======== -->
     <footer id="download">
         <div class="footer-content glass-panel">
             <h2>Ready to secure your workflow?</h2>
@@ -157,16 +226,39 @@
         </div>
     </footer>
 
-    <!-- Simple interaction script -->
+    <div class="lightbox-overlay" id="lightbox">
+        <img src="" alt="Expanded screenshot">
+    </div>
+
     <script>
+        // Lightbox
+        const lightbox = document.getElementById('lightbox');
+        const lightboxImg = lightbox.querySelector('img');
+        document.querySelectorAll('.showcase-image img').forEach(img => {
+            img.addEventListener('click', () => {
+                lightboxImg.src = img.src;
+                lightboxImg.alt = img.alt;
+                lightbox.classList.add('active');
+            });
+        });
+        lightbox.addEventListener('click', () => lightbox.classList.remove('active'));
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') lightbox.classList.remove('active');
+        });
+
+        // Parallax on hero image
         document.addEventListener('mousemove', (e) => {
             const frame = document.querySelector('.hero-image-wrapper');
             const x = (window.innerWidth / 2 - e.pageX) / 50;
             const y = (window.innerHeight / 2 - e.pageY) / 50;
-            if (frame) {
-                frame.style.transform = `rotateY(${x}deg) rotateX(${y}deg)`;
-            }
+            if (frame) frame.style.transform = `rotateY(${x}deg) rotateX(${y}deg)`;
         });
+
+        // Fade-in on scroll
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+        }, { threshold: 0.15 });
+        document.querySelectorAll('.showcase, .pipeline-step').forEach(el => observer.observe(el));
     </script>
 </body>
 </html>

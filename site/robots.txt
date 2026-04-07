@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://cloaklm.com/sitemap.xml
+Sitemap: https://rabahs.github.io/cloaklm/sitemap.xml

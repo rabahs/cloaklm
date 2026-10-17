@@ -4,14 +4,15 @@ All notable changes to CloakLM. Download any version from [Releases](https://git
 
 ## [0.4.1] - 2026-10-17
 
-**Security update. All users should upgrade.**
-
-### Security
-- **Websites could read documents through the local anonymization engine.** While CloakLM was running, a malicious web page open in your browser could ask the engine to process a PDF from your disk and read back the original, un-redacted text. The engine now answers only the CloakLM app itself, and rejects requests that use DNS rebinding to look local.
+**Critical fix and security update. All users should upgrade.**
 
 ### Fixed
+- **The app could not start its anonymization engine** (since v0.3.2), so it showed "AI Engine failed to start" and could not process documents. Three causes, all fixed: the app looked for the engine in the wrong place, macOS blocked the engine from loading its bundled Python, and the engine could repeatedly start copies of itself.
 - W-2 box 12 codes (such as `D` for 401(k) contributions) were sometimes redacted as zip codes, so the AI lost information it needed.
 - Box labels like "15 State" and "17 State" were redacted as locations.
+
+### Security
+- **Websites could read documents through the local anonymization engine.** While the engine was running, a malicious web page open in your browser could ask it to process a PDF from your disk and read back the original, un-redacted text. The engine now answers only the CloakLM app itself, and rejects requests that use DNS rebinding to look local.
 
 ### Changed
 - Security policy now explains how to report vulnerabilities privately through GitHub.

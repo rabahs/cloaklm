@@ -39,7 +39,7 @@
     ],
     "macOS": {
       "signingIdentity": "Developer ID Application: BitHunch LLC (V9MD2XLT56)",
-      "entitlements": null
+      "entitlements": "Entitlements.plist"
     }
   }
 }

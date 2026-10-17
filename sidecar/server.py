@@ -1,3 +1,12 @@
+import multiprocessing
+
+# Must run before the heavy imports below. In the PyInstaller binary, helper
+# processes (e.g. multiprocessing's resource tracker) re-execute this file; without
+# freeze_support() each one loads the models and starts another server, which
+# spawns another helper, multiplying processes until the machine runs out of memory.
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+
 import os
 import shutil
 from pathlib import Path

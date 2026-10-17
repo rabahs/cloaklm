@@ -56,12 +56,16 @@ pub fn run() {
                                 let mut child_lock = state.sidecar_child.lock().unwrap();
                                 *child_lock = Some(child);
                             }
+                            // The packaged engine unpacks itself before Python can print anything.
+                            app_handle.emit("sidecar-stage", "unpacking").ok();
 
                             // Process events until the process ends
                             while let Some(event) = rx.recv().await {
                                 if let CommandEvent::Stdout(line) = event {
                                     let output = String::from_utf8_lossy(&line);
-                                    if output.contains("CLOAKLM_PORT=") {
+                                    if let Some(stage) = output.split("CLOAKLM_STAGE=").nth(1) {
+                                        app_handle.emit("sidecar-stage", stage.trim().to_string()).ok();
+                                    } else if output.contains("CLOAKLM_PORT=") {
                                         if let Some(port_str) = output.split("CLOAKLM_PORT=").nth(1) {
                                             let port = port_str.trim().parse::<u16>().unwrap_or(4321);
                                             println!("🛡️ Sidecar ready on port {}", port);

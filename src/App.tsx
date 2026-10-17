@@ -16,17 +16,14 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { callLLM, deepScanWithLLM } from "./llm";
 import type { Message, Attachment, LLMProvider, AppSettings, AppView, ChatSession, Project } from "./types";
 import { loadSettingsStore, saveSettingsStore, loadChatSessions, saveChatSessions, loadProjects, saveProjects } from "./store";
+import { DEFAULT_MODELS } from "./models";
+import { EngineStatus, type EngineStage } from "./components/EngineStatus";
 
 const DEFAULT_SETTINGS: AppSettings = {
   provider: "claude",
   apiKeys: {},
   ollamaUrl: "http://localhost:11434",
-  activeModels: {
-    claude: "claude-3-5-sonnet-latest",
-    gemini: "gemini-3.1-pro",
-    openai: "gpt-5.4-thinking",
-    ollama: "llama3.2"
-  },
+  activeModels: { ...DEFAULT_MODELS },
   customModels: {
     claude: [], gemini: [], openai: [], ollama: []
   },
@@ -58,6 +55,7 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [engineStatus, setEngineStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [engineStage, setEngineStage] = useState<EngineStage>('unpacking');
   const [sidecarPort, setSidecarPort] = useState<number>(4321);
   const [availableProviders, setAvailableProviders] = useState<LLMProvider[]>(["claude", "gemini", "openai", "ollama"]);
   const dragCounter = useRef(0);
@@ -91,7 +89,7 @@ function App() {
 
   const handleSelectModel = useCallback((p: LLMProvider, modelId: string) => {
     setSettings((prev) => {
-      const baseActive = prev.activeModels || { claude: "claude-opus-4-6", gemini: "gemini-3.1-pro", openai: "gpt-5.4-thinking", ollama: "llama3.2" };
+      const baseActive = prev.activeModels || DEFAULT_MODELS;
       const next = { ...prev, provider: p, activeModels: { ...baseActive, [p]: modelId } };
       saveSettingsStore(next);
       return next;
@@ -101,7 +99,7 @@ function App() {
   const addCustomModel = useCallback((prov: LLMProvider, modelId: string) => {
     setSettings((prev) => {
       const baseCustom = prev.customModels || { claude: [], gemini: [], openai: [], ollama: [] };
-      const baseActive = prev.activeModels || { claude: "claude-opus-4-6", gemini: "gemini-3.1-pro", openai: "gpt-5.4-thinking", ollama: "llama3.2" };
+      const baseActive = prev.activeModels || DEFAULT_MODELS;
       const next = {
         ...prev,
         provider: prov,
@@ -209,18 +207,21 @@ function App() {
     const unlistenPromise = listen<number>("sidecar-ready", (event) => {
       setSidecarPort(event.payload);
     }).catch(() => null);
+    const unlistenStage = listen<string>("sidecar-stage", (event) => {
+      setEngineStage((prev) => (prev === "ready" ? prev : (event.payload as EngineStage)));
+    }).catch(() => null);
 
     const checkHealth = async () => {
       try {
         const res = await fetch(`http://127.0.0.1:${sidecarPort}/health`);
-        if (res.ok) { setEngineStatus('ready'); clearInterval(interval); }
-      } catch { attempts++; if (attempts > 60) { setEngineStatus('error'); clearInterval(interval); } }
+        if (res.ok) { setEngineStatus('ready'); setEngineStage('ready'); clearInterval(interval); }
+      } catch { attempts++; if (attempts > 60) { setEngineStatus('error'); setEngineStage('error'); clearInterval(interval); } }
     };
 
     checkHealth();
     refreshAvailableProviders(settings);
     interval = window.setInterval(checkHealth, 2000);
-    return () => { clearInterval(interval); unlistenPromise.then(u => u && u()); };
+    return () => { clearInterval(interval); unlistenPromise.then(u => u && u()); unlistenStage.then(u => u && u()); };
   }, [refreshAvailableProviders, settings, sidecarPort]);
 
   // --- Native Tauri drag & drop ---
@@ -566,6 +567,31 @@ function App() {
   // --- Render views ---
   const activeProject = projects.find(p => p.id === activeProjectId) || null;
 
+  const chatInput = (variant: "hero" | "docked") => (
+    <ChatInput
+      variant={variant}
+      engineReady={engineStage === "ready"}
+      onSend={sendMessage}
+      attachments={attachments}
+      onRemoveAttachment={removeAttachment}
+      onReviewAttachment={setReviewingAttachment}
+      onAttachFiles={handleFiles}
+      onAttachProjectDoc={(doc) => {
+        setHistoryAttachments(prev => ({ ...prev, [doc.id]: doc }));
+        setAttachments(prev => [...prev, doc]);
+      }}
+      projects={projects}
+      isLoading={isLoading}
+      provider={provider}
+      activeModel={settings.activeModels?.[provider] || ""}
+      onSelectModel={handleSelectModel}
+      apiKeys={settings.apiKeys}
+      ollamaUrl={settings.ollamaUrl}
+      customModels={settings.customModels || {}}
+      onAddCustomModel={addCustomModel}
+    />
+  );
+
   const renderView = () => {
     switch (activeView) {
       case "settings":
@@ -641,73 +667,42 @@ function App() {
               docCount={Object.keys(historyAttachments).length}
             />
 
-            <main className="flex-1 overflow-hidden flex flex-col relative">
-              {engineStatus === 'loading' && (
-                <div className="absolute top-0 left-0 right-0 bg-primary/10 border-b border-primary/20 p-2 text-center text-sm text-primary animate-pulse z-10">
-                  🛡️ CloakLM Shield is initializing AI models... (30-40 seconds)
-                </div>
-              )}
-              {isLoading && (
-                <div className="p-4 flex items-center justify-center gap-3 text-text-muted animate-pulse border-t border-border bg-surface/50">
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]" />
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]" />
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
-                  <span className="text-xs font-medium ml-2">CloakLM is thinking...</span>
-                  <div className="flex items-center gap-2 ml-4">
-                    <span className="text-[10px] uppercase tracking-widest bg-success/10 text-success px-2 py-0.5 rounded-full border border-success/20 font-bold">🛡️ Sentinel Firewall</span>
-                    {Object.keys(historyAttachments).length > 0 && (
-                      <span className="text-[10px] uppercase tracking-widest bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20 font-bold animate-pulse">
-                        📄 {Object.keys(historyAttachments).length} Docs Indexed
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-              {engineStatus === 'error' && (
-                <div className="absolute top-0 left-0 right-0 bg-red-500/10 border-b border-red-500/20 p-2 text-center text-sm text-red-500 z-10">
-                  ⚠️ AI Engine failed to start. Please restart the application.
-                </div>
-              )}
-              {messages.length === 0 ? (
-                <WelcomeScreen
-                  projects={projects}
-                  onOpenProject={handleOpenProject}
-                  onStartProjectChat={(projectId) => { setActiveProjectId(projectId); setActiveView("project-detail"); }}
-                  onCreateProject={(name) => {
-                    const id = crypto.randomUUID();
-                    const newProject = { id, name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), attachments: {} };
-                    const updated = [newProject, ...projects];
-                    setProjects(updated);
-                    saveProjects(updated);
-                    setActiveProjectId(id);
-                    setActiveView("project-detail");
-                  }}
-                />
-              ) : (
-                <MessageList messages={messages} isLoading={isLoading} />
-              )}
-            </main>
-
-            <ChatInput
-              onSend={sendMessage}
-              attachments={attachments}
-              onRemoveAttachment={removeAttachment}
-              onReviewAttachment={setReviewingAttachment}
-              onAttachFiles={handleFiles}
-              onAttachProjectDoc={(doc) => {
-                setHistoryAttachments(prev => ({ ...prev, [doc.id]: doc }));
-                setAttachments(prev => [...prev, doc]);
-              }}
-              projects={projects}
-              isLoading={isLoading}
-              provider={provider}
-              activeModel={settings.activeModels?.[provider] || ""}
-              onSelectModel={handleSelectModel}
-              apiKeys={settings.apiKeys}
-              ollamaUrl={settings.ollamaUrl}
-              customModels={settings.customModels || {}}
-              onAddCustomModel={addCustomModel}
-            />
+            {messages.length === 0 ? (
+              <WelcomeScreen
+                projects={projects}
+                onOpenProject={handleOpenProject}
+                onStartProjectChat={(projectId) => { setActiveProjectId(projectId); setActiveView("project-detail"); }}
+                onCreateProject={(name) => {
+                  const id = crypto.randomUUID();
+                  const newProject = { id, name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), attachments: {} };
+                  const updated = [newProject, ...projects];
+                  setProjects(updated);
+                  saveProjects(updated);
+                  setActiveProjectId(id);
+                  setActiveView("project-detail");
+                }}
+                status={engineStage !== "ready" ? <EngineStatus stage={engineStage} /> : undefined}
+                composer={chatInput("hero")}
+              />
+            ) : (
+              <>
+                <main className="flex-1 overflow-hidden flex flex-col relative">
+                  {engineStage === "error" && (
+                    <div className="max-w-3xl w-full mx-auto px-4 pt-2"><EngineStatus stage="error" /></div>
+                  )}
+                  <MessageList messages={messages} isLoading={isLoading} />
+                  {isLoading && (
+                    <div className="max-w-3xl w-full mx-auto px-6 pb-2 flex items-center gap-2 text-text-muted">
+                      <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]" />
+                      <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]" />
+                      <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" />
+                      <span className="text-xs ml-1">Thinking...</span>
+                    </div>
+                  )}
+                </main>
+                {chatInput("docked")}
+              </>
+            )}
             {isDragging && <DropOverlay />}
           </div>
         );

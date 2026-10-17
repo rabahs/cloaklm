@@ -1,4 +1,5 @@
 import type { AppView } from "../types";
+import { ChatIcon, ClockIcon, FolderIcon, SettingsIcon } from "./Icons";
 
 interface LeftRailProps {
   activeView: AppView;
@@ -6,17 +7,17 @@ interface LeftRailProps {
   hasApiKey: boolean;
 }
 
-const NAV_ITEMS: { view: AppView; icon: string; label: string }[] = [
-  { view: "chat", icon: "💬", label: "Chats" },
-  { view: "projects", icon: "📁", label: "Projects" },
-  { view: "history", icon: "🕰️", label: "History" },
+const NAV_ITEMS: { view: AppView; Icon: typeof ChatIcon; label: string }[] = [
+  { view: "chat", Icon: ChatIcon, label: "Chat" },
+  { view: "projects", Icon: FolderIcon, label: "Projects" },
+  { view: "history", Icon: ClockIcon, label: "History" },
 ];
 
 export function LeftRail({ activeView, onNavigate, hasApiKey }: LeftRailProps) {
   return (
-    <nav className="w-14 bg-surface-elevated border-r border-border flex flex-col items-center py-3 gap-1 shrink-0">
+    <nav className="w-14 bg-surface-elevated/40 flex flex-col items-center py-3 gap-1.5 shrink-0">
       {/* Logo */}
-      <div className="w-9 h-9 rounded-xl overflow-hidden mb-4 shadow-sm border border-border">
+      <div className="w-8 h-8 rounded-lg overflow-hidden mb-4">
         <img src="/logo.png" alt="CloakLM" className="w-full h-full object-cover" />
       </div>
 
@@ -25,14 +26,14 @@ export function LeftRail({ activeView, onNavigate, hasApiKey }: LeftRailProps) {
         <button
           key={item.view}
           onClick={() => onNavigate(item.view)}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg transition-all ${
+          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
             activeView === item.view || (item.view === "projects" && activeView === "project-detail")
-              ? "bg-primary/15 text-primary shadow-sm ring-1 ring-primary/20"
-              : "text-text-muted hover:text-text-primary hover:bg-surface-hover"
+              ? "bg-surface-hover text-text-primary"
+              : "text-text-muted hover:text-text-primary hover:bg-surface-hover/60"
           }`}
           title={item.label}
         >
-          {item.icon}
+          <item.Icon className="w-5 h-5" />
         </button>
       ))}
 
@@ -42,16 +43,15 @@ export function LeftRail({ activeView, onNavigate, hasApiKey }: LeftRailProps) {
       {/* Settings (bottom-pinned) */}
       <button
         onClick={() => onNavigate("settings")}
-        className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg transition-all ${
+        className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
           activeView === "settings"
-            ? "bg-primary/15 text-primary shadow-sm ring-1 ring-primary/20"
-            : !hasApiKey
-              ? "text-danger animate-pulse hover:bg-danger/10"
-              : "text-text-muted hover:text-text-primary hover:bg-surface-hover"
+            ? "bg-surface-hover text-text-primary"
+            : "text-text-muted hover:text-text-primary hover:bg-surface-hover/60"
         }`}
-        title="Settings"
+        title={hasApiKey ? "Settings" : "Settings: add an API key to start chatting"}
       >
-        ⚙️
+        <SettingsIcon className="w-5 h-5" />
+        {!hasApiKey && <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-danger" />}
       </button>
     </nav>
   );

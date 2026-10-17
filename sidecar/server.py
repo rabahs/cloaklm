@@ -7,6 +7,9 @@ import multiprocessing
 if __name__ == "__main__":
     multiprocessing.freeze_support()
 
+# Startup stages, relayed to the UI's progress indicator by the Tauri shell.
+print("CLOAKLM_STAGE=libraries", flush=True)
+
 import os
 import shutil
 from pathlib import Path
@@ -36,6 +39,7 @@ app.add_middleware(
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
 
 # Initialize engines once on startup (loads models into memory)
+print("CLOAKLM_STAGE=models", flush=True)
 print("Loading CloakLM Engines...")
 converter = DocumentConverter()
 anonymizer = GLiNERAnonymizer()

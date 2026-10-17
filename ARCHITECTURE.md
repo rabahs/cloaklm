@@ -75,5 +75,6 @@ LLM responds using placeholders → React de-anonymizes → User sees real names
 | PII detection | Runs 100% locally via GLiNER (no network calls) |
 | Manual redaction | User can catch anything the model missed |
 | LLM communication | Only anonymized text sent; direct to provider (no proxy) |
-| API key storage | localStorage (to be migrated to Tauri secure store in M4) |
+| Local sidecar | Bound to 127.0.0.1; only the CloakLM webview origin may read responses, and requests for any other Host are rejected (DNS-rebinding guard) |
+| API key storage | Local settings file via `tauri-plugin-store` (not encrypted; OS keychain is a possible future upgrade) |
 | De-anonymization | Happens client-side only; AI never sees real values |

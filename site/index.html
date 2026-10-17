@@ -75,6 +75,14 @@
         },
         {
             "@type": "Question",
+            "name": "Does CloakLM guarantee that all my personal information is removed?",
+            "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "No. Detection is automated and very good, but no tool catches everything, especially in scanned or unusual documents. That is why CloakLM shows you the exact text it will send before anything leaves your computer. Always check it. See the full disclaimer."
+            }
+        },
+        {
+            "@type": "Question",
             "name": "Are the messages I type anonymized too?",
             "acceptedAnswer": {
                 "@type": "Answer",
@@ -357,6 +365,10 @@
                 <p>CloakLM detects Social Security numbers, EINs, names, addresses, emails, and phone numbers, and keeps dollar amounts intact so the AI can still do the math. Automated detection is not perfect, so open the Review panel and check the “Raw Output to AI” tab before you send. That tab shows exactly what the AI will receive, and you can redact anything else by selecting it.</p>
             </details>
             <details class="faq-item glass-panel">
+                <summary>Does CloakLM guarantee that all my personal information is removed?</summary>
+                <p>No. Detection is automated and very good, but no tool catches everything, especially in scanned or unusual documents. That is why CloakLM shows you the exact text it will send before anything leaves your computer. Always check it. See the full <a href="https://github.com/rabahs/cloaklm/blob/main/DISCLAIMER.md" style="text-decoration: underline;">disclaimer</a>.</p>
+            </details>
+            <details class="faq-item glass-panel">
                 <summary>Are the messages I type anonymized too?</summary>
                 <p>Yes. Before a message is sent, CloakLM replaces any names or numbers it found in your documents, then runs a final pass for SSNs, emails, phone numbers, and street addresses. It is still best not to type new personal details the app has never seen.</p>
             </details>
@@ -391,8 +403,8 @@
             <a href="https://github.com/rabahs/cloaklm/releases/latest" class="btn btn-primary glow-btn">Download Release</a>
         </div>
         <div class="footer-bottom">
-            <p><a href="guides/">Guides</a> &middot; <a href="#faq">FAQ</a> &middot; <a href="https://github.com/rabahs/cloaklm">GitHub</a></p>
-            <p>&copy; 2026 CloakLM. Free &amp; open source (MIT).</p>
+            <p><a href="guides/">Guides</a> &middot; <a href="#faq">FAQ</a> &middot; <a href="https://github.com/rabahs/cloaklm">GitHub</a> &middot; <a href="https://github.com/rabahs/cloaklm/blob/main/DISCLAIMER.md">Disclaimer</a></p>
+            <p>&copy; 2026 CloakLM. Free &amp; open source (MIT). Provided as is; always review redactions before sending.</p>
         </div>
     </footer>
 

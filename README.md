@@ -21,6 +21,9 @@
 
 Dollar amounts and document structure stay intact, so the AI can still do the math. Before anything is sent, you can review every redaction and add your own.
 
+> [!IMPORTANT]
+> Automated redaction can miss things. Always check the **Raw Output to AI** tab before sending. CloakLM is not tax or legal advice. See the [Disclaimer](./DISCLAIMER.md).
+
 <p>
   <img src="site/assets/redaction_review.png" width="49%" alt="Redaction review panel listing detected names and addresses">
   <img src="site/assets/raw_output.png" width="49%" alt="Raw anonymized text exactly as sent to the AI">
@@ -102,6 +105,10 @@ The marketing site lives in [`site/`](./site) and deploys to GitHub Pages.
 ## Contact
 
 Rabah Shihab - [@rabahs](https://github.com/rabahs)
+
+## Disclaimer
+
+CloakLM is provided as is, with no guarantee that every piece of personal information will be detected. Please read the full [Disclaimer](./DISCLAIMER.md) before relying on it.
 
 ## License
 

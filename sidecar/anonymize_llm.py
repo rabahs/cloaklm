@@ -63,14 +63,42 @@ TAX_FORM_WHITELIST = {
 }
 
 
+# W-2 box 12 codes (IRS). None of the two-letter codes collide with US state abbreviations.
+BOX_12_CODES = {
+    "a", "b", "c", "d", "e", "f", "g", "h", "j", "k", "l", "m", "n", "p", "q",
+    "r", "s", "t", "v", "w", "y", "z", "aa", "bb", "dd", "ee", "ff", "gg", "hh", "ii",
+}
+
+# Leading box/line labels on tax forms: "15 State", "12a Code D", "Box 17"
+_BOX_PREFIX = re.compile(r'^(?:box\s+|line\s+)?\d{1,2}[a-d]?\s+')
+
+
 def is_whitelisted(text: str) -> bool:
     cleaned = text.lower().strip().rstrip(".,;:")
     if cleaned in TAX_FORM_WHITELIST:
+        return True
+    # Box-labeled terms ("15 State", "12a Code D") match exactly only, never by
+    # the prefix rule below, so "10 Federal St" is still treated as an address.
+    unboxed = _BOX_PREFIX.sub("", cleaned)
+    if unboxed in TAX_FORM_WHITELIST:
+        return True
+    if unboxed.startswith("code ") and unboxed[5:].strip() in BOX_12_CODES:
         return True
     for term in TAX_FORM_WHITELIST:
         if cleaned.startswith(term) and len(cleaned) - len(term) < 5:
             return True
     return False
+
+
+def is_plausible(text: str, category: str) -> bool:
+    """Reject GLiNER guesses whose shape can't be that kind of PII
+    (e.g. the box 12 code "D" labeled as a zip code)."""
+    alnum = re.sub(r'[^A-Za-z0-9]', '', text)
+    if len(alnum) < 2:
+        return False
+    if category == "ZIP":
+        return re.search(r'\d{5}', text) is not None
+    return True
 
 
 # GLiNER entity labels → our placeholder categories
@@ -184,6 +212,10 @@ class GLiNERAnonymizer:
             # Map label to our category
             label = entity["label"].lower()
             category = LABEL_MAP.get(label, "PERSON")
+
+            # Skip guesses whose shape can't match the category
+            if not is_plausible(entity_text, category):
+                continue
 
             placeholder = self._get_placeholder(entity_text, category)
             text = text[:entity["start"]] + placeholder + text[entity["end"]:]

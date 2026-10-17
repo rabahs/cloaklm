@@ -2,8 +2,18 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
         <loc>https://rabahs.github.io/cloaklm/</loc>
-        <lastmod>2026-04-06</lastmod>
-        <changefreq>weekly</changefreq>
-        <priority>1.0</priority>
+        <lastmod>2026-10-17</lastmod>
+    </url>
+    <url>
+        <loc>https://rabahs.github.io/cloaklm/guides/</loc>
+        <lastmod>2026-10-17</lastmod>
+    </url>
+    <url>
+        <loc>https://rabahs.github.io/cloaklm/guides/is-it-safe-to-upload-w2-to-chatgpt.html</loc>
+        <lastmod>2026-10-17</lastmod>
+    </url>
+    <url>
+        <loc>https://rabahs.github.io/cloaklm/guides/how-to-redact-ssn-from-pdf.html</loc>
+        <lastmod>2026-10-17</lastmod>
     </url>
 </urlset>

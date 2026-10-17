@@ -6,7 +6,7 @@
 
 **Ask AI about your W-2 without giving it your SSN.** Drop in a tax form, bank statement, or medical bill. CloakLM strips the personal information *on your device*, then lets you chat with Claude, GPT, Gemini, or a fully offline Ollama model. The AI sees `[PERSON_1]` and `[SSN_REDACTED]`; you see the real names in its answers.
 
-**[⬇ Download for macOS or Windows](https://github.com/rabahs/cloaklm/releases/latest)** · [Website](https://rabahs.github.io/cloaklm/)
+**[⬇ Download for macOS or Windows](https://github.com/rabahs/cloaklm/releases/latest)** · [Website](https://rabahs.github.io/cloaklm/) · [Privacy guides](https://rabahs.github.io/cloaklm/guides/)
 
 ![CloakLM redacting a sample W-2](site/assets/demo.gif)
 
@@ -86,33 +86,15 @@ Click ⚙️ in the app header to add your API keys for:
 
 ## Project Structure
 
-```
-cloaklm/
-├── src/                    # React + TypeScript + Tailwind CSS frontend
-│   ├── App.tsx             # Main app shell
-│   ├── llm.ts              # LLM API service (Claude/Gemini/OpenAI/Ollama)
-│   ├── types.ts            # Shared TypeScript types
-│   └── components/         # UI components
-│       ├── ChatHeader.tsx
-│       ├── ChatInput.tsx
-│       ├── MessageBubble.tsx
-│       ├── MessageList.tsx
-│       ├── ReviewPanel.tsx
-│       ├── SettingsModal.tsx
-│       ├── WelcomeScreen.tsx
-│       ├── AttachmentChip.tsx
-│       └── DropOverlay.tsx
-├── src-tauri/              # Rust (Tauri 2.0) desktop wrapper
-│   ├── tauri.conf.json     # App config, window settings
-│   └── src/
-│       ├── main.rs         # Binary entry point
-│       └── lib.rs          # Tauri builder & commands
-├── sidecar/                # Python anonymization engine
-│   ├── server.py           # FastAPI local server (port 4321)
-│   ├── anonymize_llm.py    # GLiNER PII detection + regex fallback
-│   └── requirements.txt    # Python dependencies
-└── .venv/                  # Python virtual environment
-```
+CloakLM has three parts:
+
+| Folder | What it is | Built with |
+|---|---|---|
+| [`src/`](./src) | Desktop UI: chat, projects, review panel, settings. [`llm.ts`](./src/llm.ts) holds the provider calls and the final outbound PII scrub. | React, TypeScript, Tailwind |
+| [`sidecar/`](./sidecar) | Local anonymization engine. Extracts PDF text and replaces PII with placeholders; nothing leaves the machine. | Python, FastAPI, GLiNER, Docling |
+| [`src-tauri/`](./src-tauri) | Native shell that packages the app and starts the sidecar. | Rust, Tauri 2 |
+
+The marketing site lives in [`site/`](./site) and deploys to GitHub Pages.
 
 > For architecture details, design decisions, and security model, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 > For the roadmap and milestone tracking, see [MILESTONES.md](./MILESTONES.md).

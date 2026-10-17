@@ -75,8 +75,8 @@ async function main() {
   await page.screenshot({ path: path.join(OUT_DIR, 'raw_output.png'), clip: PANEL_CLIP });
   await stills.close();
 
-  // ===== Demo video → GIF =====
-  console.log('3. Demo GIF');
+  // ===== Demo video → GIF (README) + MP4/WebM (website) =====
+  console.log('3. Demo GIF + video');
   const vidDir = path.join(tmp, 'video');
   const vid = await browser.newContext({
     viewport: VIEWPORT, colorScheme: 'dark',
@@ -92,7 +92,12 @@ async function main() {
   const webm = path.join(vidDir, fs.readdirSync(vidDir)[0]);
   const gif = path.join(OUT_DIR, 'demo.gif');
   const filters = 'fps=12,scale=960:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=bayer:bayer_scale=4';
-  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', webm, '-vf', filters, '-loop', '0', gif]);
+  const ff = (...args) => execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', webm, ...args]);
+  ff('-vf', filters, '-loop', '0', gif);
+  // GitHub READMEs can't autoplay repo videos, so the site gets real video: ~10x smaller than the GIF.
+  ff('-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '26', '-preset', 'slow', '-movflags', '+faststart', path.join(OUT_DIR, 'demo.mp4'));
+  ff('-an', '-c:v', 'libvpx-vp9', '-crf', '38', '-b:v', '0', '-row-mt', '1', path.join(OUT_DIR, 'demo.webm'));
+  ff('-frames:v', '1', '-q:v', '3', path.join(OUT_DIR, 'demo_poster.jpg'));
   fs.rmSync(tmp, { recursive: true, force: true });
   console.log('Done →', OUT_DIR);
 }

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Redact Your SSN From a PDF Before Using AI | CloakLM</title>
+    <meta name="description" content="A black box over your SSN usually doesn't remove it. How to truly redact a PDF, how to check it worked, and a faster option when it's going to an AI.">
+    <link rel="canonical" href="https://rabahs.github.io/cloaklm/guides/how-to-redact-ssn-from-pdf.html">
+
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://rabahs.github.io/cloaklm/guides/how-to-redact-ssn-from-pdf.html">
+    <meta property="og:title" content="How to Redact Your SSN From a PDF Before Using AI">
+    <meta property="og:description" content="Why a black box doesn't remove anything, how to redact properly, and how to check it worked.">
+    <meta property="og:image" content="https://rabahs.github.io/cloaklm/assets/redaction_review.png">
+    <meta property="twitter:card" content="summary_large_image">
+
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "HowTo",
+        "name": "How to Redact Your SSN From a PDF Before Using AI",
+        "description": "Truly remove a Social Security number from a PDF and verify that it is gone before sharing the document with an AI tool.",
+        "image": "https://rabahs.github.io/cloaklm/assets/redaction_review.png",
+        "step": [
+            { "@type": "HowToStep", "name": "Use a real redaction tool", "text": "Use a tool that removes the underlying text, such as the Redact tool in Adobe Acrobat Pro, rather than drawing a black shape over it." },
+            { "@type": "HowToStep", "name": "Apply the redaction and save a new copy", "text": "Mark every SSN, name, and address, apply the redactions, and save as a new file so the original stays untouched." },
+            { "@type": "HowToStep", "name": "Verify the text is gone", "text": "Open the new file, search for the last four digits of your SSN, then select all text and paste it into a plain text editor. If the SSN appears anywhere, the redaction failed." }
+        ]
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+            { "@type": "ListItem", "position": 1, "name": "CloakLM", "item": "https://rabahs.github.io/cloaklm/" },
+            { "@type": "ListItem", "position": 2, "name": "Guides", "item": "https://rabahs.github.io/cloaklm/guides/" },
+            { "@type": "ListItem", "position": 3, "name": "How to Redact Your SSN From a PDF Before Using AI" }
+        ]
+    }
+    </script>
+
+    <link rel="icon" type="image/png" href="../assets/logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+    <div class="glow-orb orb-1"></div>
+    <div class="glow-orb orb-2"></div>
+
+    <nav class="navbar" aria-label="Main navigation">
+        <a href="../" class="logo">
+            <img src="../assets/logo.png" alt="CloakLM Logo" class="icon-img" width="32" height="32"> CloakLM
+        </a>
+        <div class="nav-links">
+            <a href="../#features">Features</a>
+            <a href="./">Guides</a>
+            <a href="../#faq">FAQ</a>
+            <a href="https://github.com/rabahs/cloaklm/releases/latest" class="btn btn-outline">Download</a>
+        </div>
+    </nav>
+
+    <main class="article">
+        <p class="breadcrumb"><a href="../">CloakLM</a> / <a href="./">Guides</a></p>
+        <h1>How to Redact Your SSN From a PDF Before Using AI</h1>
+        <p class="lede">Before you upload a tax form, pay stub, or medical bill to an AI tool, you&rsquo;ll want your Social Security number gone. Not covered, <em>gone</em>. Those are different things, and the difference catches a lot of people.</p>
+        <p class="meta">Updated <time datetime="2026-10-17">October 17, 2026</time> · 5 min read</p>
+
+        <h2>Why a black box usually doesn&rsquo;t work</h2>
+        <p>Most PDFs store their text as real, selectable characters. When you draw a black rectangle over your SSN with a markup or shape tool, you add a new layer <em>on top</em>. The characters underneath are still in the file.</p>
+        <p>You can&rsquo;t see the number, but software can. An AI chatbot reads the PDF&rsquo;s text layer, not the picture, so it receives your full SSN. So does anyone who copies and pastes the page or searches the file. This is how redacted court filings and government documents have repeatedly leaked: the black boxes were only drawings.</p>
+        <div class="callout glass-panel">
+            <p><strong>Rule of thumb:</strong> if the tool you used is called &ldquo;shape,&rdquo; &ldquo;highlight,&rdquo; &ldquo;markup,&rdquo; or &ldquo;annotate,&rdquo; you covered the text. Only a tool that says <strong>redact</strong>, and makes you <strong>apply</strong> the redaction, actually removes it.</p>
+        </div>
+
+        <h2>Method 1: Use a real redaction tool</h2>
+        <p>A true redaction tool deletes the underlying text and leaves the black box in its place.</p>
+        <ol>
+            <li><strong>Open the PDF in a tool with real redaction.</strong> Adobe Acrobat Pro has a dedicated Redact tool, and some other PDF editors offer one too. Look for wording like &ldquo;permanently remove.&rdquo;</li>
+            <li><strong>Mark everything that identifies you.</strong> On a W-2 that means your SSN (box a), your name and address (boxes e and f), and usually the employer&rsquo;s EIN (box b). Search the whole document: SSNs often repeat on every copy of the form in a single PDF.</li>
+            <li><strong>Apply the redactions and save as a new file.</strong> Keep your original for your records.</li>
+            <li>In Acrobat, also run <strong>Sanitize Document</strong> to strip hidden metadata, comments, and attachments.</li>
+        </ol>
+
+        <h2>Method 2: Print it to an image, then crop or cover</h2>
+        <p>If you have no redaction tool, you can turn the page into a picture so there is no text layer left: take a screenshot of each page, cover the sensitive parts in an image editor, and save it as PNG or JPG. It works, but it&rsquo;s tedious across several pages, and the AI then has to read the numbers back out of an image, which can introduce mistakes on a tax form.</p>
+
+        <h2>Always verify: the two-minute check</h2>
+        <p>Whatever method you used, test the result before you share it:</p>
+        <ol>
+            <li><strong>Search for it.</strong> Open the redacted file and search (<code>Cmd+F</code> / <code>Ctrl+F</code>) for the last four digits of your SSN. Zero results is what you want.</li>
+            <li><strong>Copy everything out.</strong> Select all text on the page, copy, and paste into a plain text editor. If your SSN, name, or address shows up in the pasted text, the redaction failed, and an AI would have seen it.</li>
+        </ol>
+
+        <h2>Method 3: Skip the PDF editing entirely</h2>
+        <p>If the reason you&rsquo;re redacting is to ask an AI about the document, you don&rsquo;t actually need a redacted PDF. You need the AI to receive <em>text without your identity in it</em>. That&rsquo;s what <a href="../">CloakLM</a> does: you drop in the original PDF, and it detects SSNs, names, addresses, EINs, emails, and phone numbers <strong>on your computer</strong>, replacing each with a placeholder like <code>[SSN_REDACTED]</code> or <code>[PERSON_1]</code>.</p>
+        <figure>
+            <img src="../assets/redaction_review.png" alt="CloakLM review panel listing each detected name and address with the placeholder that replaced it" loading="lazy">
+            <figcaption>Every detected item is listed for review. Select any missed text to redact it by hand.</figcaption>
+        </figure>
+        <p>Your original file is never modified, dollar amounts stay intact, and the &ldquo;Raw Output to AI&rdquo; view does the verification step for you: it shows the exact text that will be sent. When the AI replies, real names are restored on your screen only. It&rsquo;s free and open source, and works with Claude, GPT, Gemini, or fully offline with Ollama.</p>
+
+        <h2>Quick summary</h2>
+        <table>
+            <thead><tr><th>Method</th><th>Removes the text?</th><th>Best for</th></tr></thead>
+            <tbody>
+                <tr><td>Black box / markup</td><td><strong>No</strong></td><td>Nothing; avoid</td></tr>
+                <tr><td>Real redaction tool</td><td>Yes</td><td>PDFs you&rsquo;ll share with people</td></tr>
+                <tr><td>Screenshot + cover</td><td>Yes</td><td>One-off pages, no tools</td></tr>
+                <tr><td>Local anonymizer (CloakLM)</td><td>Yes, before sending</td><td>Asking AI about your documents</td></tr>
+            </tbody>
+        </table>
+        <p>Related: <a href="is-it-safe-to-upload-w2-to-chatgpt.html">Is it safe to upload your W-2 to ChatGPT?</a></p>
+
+        <div class="cta glass-panel">
+            <h2>Chat with your documents, not your identity</h2>
+            <p>CloakLM is free and open source for Mac and Windows.</p>
+            <a href="https://github.com/rabahs/cloaklm/releases/latest" class="btn btn-primary glow-btn">Download CloakLM</a>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-bottom">
+            <p><a href="../">Home</a> &middot; <a href="./">Guides</a> &middot; <a href="https://github.com/rabahs/cloaklm">GitHub</a></p>
+            <p>&copy; 2026 CloakLM. Free &amp; open source (MIT). This guide is general information, not legal advice.</p>
+        </div>
+    </footer>
+</body>
+</html>

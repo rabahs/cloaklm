@@ -11,9 +11,12 @@ import os from 'os';
 import path from 'path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const OUT_DIR = path.join(__dirname, '..', 'docs', 'images');
+const OUT_DIR = path.join(__dirname, '..', 'site', 'assets');
 const BASE_URL = 'http://localhost:5199';
 const VIEWPORT = { width: 1280, height: 800 };
+// Stills are cropped to the 450px review panel plus a sliver of the app behind it,
+// so the panel text stays readable when the image is shown small.
+const PANEL_CLIP = { x: 690, y: 0, width: 590, height: 640 };
 
 // All data below is fictional.
 const W2_HTML = `<html><body style="font-family:Helvetica,Arial;font-size:13px;padding:30px">
@@ -65,11 +68,11 @@ async function main() {
   const page = await stills.newPage();
   await runFlow(page, pdfPath);
   console.log('1. Redaction review list');
-  await page.screenshot({ path: path.join(OUT_DIR, 'redaction_review.png') });
+  await page.screenshot({ path: path.join(OUT_DIR, 'redaction_review.png'), clip: PANEL_CLIP });
   console.log('2. Raw output sent to AI');
   await page.locator('button', { hasText: 'Raw Output to AI' }).click();
   await page.waitForTimeout(600);
-  await page.screenshot({ path: path.join(OUT_DIR, 'raw_output.png') });
+  await page.screenshot({ path: path.join(OUT_DIR, 'raw_output.png'), clip: PANEL_CLIP });
   await stills.close();
 
   // ===== Demo video → GIF =====

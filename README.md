@@ -8,7 +8,7 @@
 
 **[⬇ Download for macOS or Windows](https://github.com/rabahs/cloaklm/releases/latest)** · [Website](https://rabahs.github.io/cloaklm/)
 
-![CloakLM redacting a sample W-2](docs/images/demo.gif)
+![CloakLM redacting a sample W-2](site/assets/demo.gif)
 
 ## What the AI actually sees
 
@@ -22,8 +22,8 @@
 Dollar amounts and document structure stay intact, so the AI can still do the math. Before anything is sent, you can review every redaction and add your own.
 
 <p>
-  <img src="docs/images/redaction_review.png" width="49%" alt="Redaction review panel listing detected names and addresses">
-  <img src="docs/images/raw_output.png" width="49%" alt="Raw anonymized text exactly as sent to the AI">
+  <img src="site/assets/redaction_review.png" width="49%" alt="Redaction review panel listing detected names and addresses">
+  <img src="site/assets/raw_output.png" width="49%" alt="Raw anonymized text exactly as sent to the AI">
 </p>
 
 ## Use cases

@@ -4,6 +4,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
 
 # We import the classes directly from our bundled scripts
@@ -12,14 +13,18 @@ from anonymize_llm import GLiNERAnonymizer
 
 app = FastAPI(title="CloakLM Local Backend")
 
-# Allow the Tauri webview to hit this local server
+# Only the CloakLM webview (tauri://localhost on macOS, http://tauri.localhost on
+# Windows) and local dev servers may read responses. With "*", any website open in
+# the user's browser could POST a file_path and read back the un-redacted text.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict to Tauri's localhost port
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origin_regex=r"^(tauri://localhost|https?://tauri\.localhost|http://(localhost|127\.0\.0\.1)(:\d+)?)$",
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+# Reject requests addressed to any other hostname (blocks DNS-rebinding attacks,
+# where a malicious domain resolves to 127.0.0.1 to look same-origin).
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
 
 # Initialize engines once on startup (loads models into memory)
 print("Loading CloakLM Engines...")

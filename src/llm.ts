@@ -1,30 +1,31 @@
 import type { LLMProvider, Attachment, DeepScanSuggestion } from "./types";
+import { DEFAULT_MODELS } from "./models";
 
 // Provider configuration
 const PROVIDER_CONFIG: Record<string, { url: string; defaultModel: string }> = {
   claude: {
     url: "https://api.anthropic.com/v1/messages",
-    defaultModel: "claude-sonnet-4-20250514",
+    defaultModel: DEFAULT_MODELS.claude,
   },
   gemini: {
     url: "https://generativelanguage.googleapis.com/v1beta/models",
-    defaultModel: "gemini-2.5-flash",
+    defaultModel: DEFAULT_MODELS.gemini,
   },
   openai: {
     url: "https://api.openai.com/v1/chat/completions",
-    defaultModel: "gpt-4o",
+    defaultModel: DEFAULT_MODELS.openai,
   },
   ollama: {
     url: "http://localhost:11434/api/chat",
-    defaultModel: "llama3",
+    defaultModel: DEFAULT_MODELS.ollama,
   },
 };
 
 export function getProviderDisplayName(provider: LLMProvider): string {
   const names: Record<LLMProvider, string> = {
-    claude: "Claude Sonnet",
-    gemini: "Gemini Flash",
-    openai: "GPT-4o",
+    claude: "Claude",
+    gemini: "Gemini",
+    openai: "OpenAI",
     ollama: "Ollama (Local)",
   };
   return names[provider];
@@ -292,6 +293,9 @@ async function callClaude(
   systemPrompt: string
 ): Promise<string> {
   const config = PROVIDER_CONFIG.claude;
+  const model = modelId || config.defaultModel;
+  // On a safety decline these models can hand the turn to another model server-side.
+  const useFallbacks = CLAUDE_FALLBACK_MODELS.has(model);
 
   const response = await fetch(config.url, {
     method: "POST",
@@ -300,10 +304,13 @@ async function callClaude(
       "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",
       "anthropic-dangerous-direct-browser-access": "true",
+      ...(useFallbacks ? { "anthropic-beta": "server-side-fallback-2026-07-01" } : {}),
     },
     body: JSON.stringify({
-      model: modelId || config.defaultModel,
-      max_tokens: 4096,
+      model,
+      // Current models think before answering, and thinking counts toward this cap.
+      max_tokens: 16000,
+      ...(useFallbacks ? { fallbacks: "default" } : {}),
       system: systemPrompt,
       messages: messages.map((m) => ({
         role: m.role === "user" ? "user" : "assistant",
@@ -317,8 +324,17 @@ async function callClaude(
   }
 
   const data = await response.json();
-  return data.content[0].text;
+  if (data.stop_reason === "refusal") {
+    throw new Error("Claude declined to answer this request. Try rephrasing it, or choose a different model.");
+  }
+  // The first block is often a thinking block; the answer is in the text blocks.
+  return (data.content || [])
+    .filter((b: { type: string }) => b.type === "text")
+    .map((b: { text: string }) => b.text)
+    .join("");
 }
+
+const CLAUDE_FALLBACK_MODELS = new Set(["claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"]);
 
 async function callGemini(
   apiKey: string,
@@ -348,7 +364,13 @@ async function callGemini(
   }
 
   const data = await response.json();
-  return data.candidates[0].content.parts[0].text;
+  const parts: { text?: string; thought?: boolean }[] = data.candidates?.[0]?.content?.parts || [];
+  if (parts.length === 0) {
+    const reason = data.promptFeedback?.blockReason || data.candidates?.[0]?.finishReason || "no response";
+    throw new Error(`Gemini returned no answer (${reason}). Try rephrasing, or choose a different model.`);
+  }
+  // Thinking models can return thought parts before the answer.
+  return parts.filter((p) => !p.thought && p.text).map((p) => p.text).join("");
 }
 
 async function callOpenAI(
@@ -376,7 +398,8 @@ async function callOpenAI(
     body: JSON.stringify({
       model: modelId || config.defaultModel,
       messages: apiMessages,
-      max_tokens: 4096,
+      // Reasoning models reject max_tokens; this cap also covers their reasoning tokens.
+      max_completion_tokens: 16000,
     }),
   });
 
@@ -385,7 +408,11 @@ async function callOpenAI(
   }
 
   const data = await response.json();
-  return data.choices[0].message.content;
+  const message = data.choices?.[0]?.message;
+  if (!message?.content) {
+    throw new Error(message?.refusal || "OpenAI returned an empty answer. Try rephrasing, or choose a different model.");
+  }
+  return message.content;
 }
 
 async function callOllama(

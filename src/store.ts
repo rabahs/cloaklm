@@ -1,5 +1,6 @@
 import { load, Store } from '@tauri-apps/plugin-store';
 import type { AppSettings, ChatSession, LLMProvider, Project } from './types';
+import { migrateActiveModels } from './models';
 
 // Create a single store instance for the app
 let storePromise: Promise<Store> | null = null;
@@ -19,7 +20,7 @@ export const loadSettingsStore = async (defaultSettings: AppSettings): Promise<A
       return { 
         ...defaultSettings, 
         ...saved,
-        activeModels: { ...defaultSettings.activeModels, ...(saved.activeModels as Record<LLMProvider, string> || {}) },
+        activeModels: migrateActiveModels(saved.activeModels),
         customModels: { ...defaultSettings.customModels, ...(saved.customModels as Record<LLMProvider, string[]> || {}) }
       };
     }

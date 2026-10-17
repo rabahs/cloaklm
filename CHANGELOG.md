@@ -10,6 +10,7 @@ All notable changes to CloakLM. Download any version from [Releases](https://git
 - **The app could not start its anonymization engine** (since v0.3.2), so it showed "AI Engine failed to start" and could not process documents. Three causes, all fixed: the app looked for the engine in the wrong place, macOS blocked the engine from loading its bundled Python, and the engine could repeatedly start copies of itself.
 - W-2 box 12 codes (such as `D` for 401(k) contributions) were sometimes redacted as zip codes, so the AI lost information it needed.
 - Box labels like "15 State" and "17 State" were redacted as locations.
+- Quitting the app left the privacy engine running in the background, holding its AI models in memory and leaving about 800 MB of temporary files behind each time.
 - "Add custom model" did nothing.
 - Replies from current Claude models could come back blank, and OpenAI's reasoning models returned an error.
 - Settings still pointing at retired default models (such as Gemini 2.5 Flash, retiring October 20, 2026) move to current ones automatically.

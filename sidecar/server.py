@@ -133,7 +133,26 @@ if __name__ == "__main__":
             return s.getsockname()[1]
 
     port = get_free_port()
-    
+
+    # Exit when the process that launched us goes away. The app stops the engine by
+    # SIGKILLing PyInstaller's launcher, which can't forward that signal, so without
+    # this the server kept running (models in memory) and the 784 MB it unpacked was
+    # never deleted. Also covers the app crashing.
+    def exit_with_parent():
+        import threading
+        import time
+
+        launcher = os.getppid()
+        def watch():
+            while os.getppid() == launcher:
+                time.sleep(2)
+            if getattr(sys, "frozen", False):
+                shutil.rmtree(getattr(sys, "_MEIPASS", ""), ignore_errors=True)
+            os._exit(0)
+        threading.Thread(target=watch, daemon=True).start()
+
+    exit_with_parent()
+
     # EMIT the strict structured log for Tauri to parse
     print(f"CLOAKLM_PORT={port}", flush=True)
     

@@ -13,7 +13,7 @@ All notable changes to CloakLM. Download any version from [Releases](https://git
 - Quitting the app left the privacy engine running in the background, holding its AI models in memory and leaving about 800 MB of temporary files behind each time.
 - "Add custom model" did nothing.
 - Replies from current Claude models could come back blank, and OpenAI's reasoning models returned an error.
-- Settings still pointing at retired default models (such as Gemini 2.5 Flash, retiring October 20, 2026) move to current ones automatically.
+- Model choices from earlier versions' defaults move once to today's equivalent in the same tier (for example Claude Opus 4.6 to Opus 5.5, Gemini 2.5 Flash, retiring October 20, 2026, to Gemini 3.8 Flash). Models you pick afterwards are never changed.
 
 ### Changed
 - **Redesigned home screen**: the message box sits in the center with recent projects right below it, with fewer lines and cleaner icons.

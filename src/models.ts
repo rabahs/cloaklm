@@ -29,24 +29,39 @@ export const DEFAULT_MODELS: Record<LLMProvider, string> = {
   ollama: "llama3.2",
 };
 
-// IDs that earlier CloakLM versions shipped as defaults and that no longer work
-// (retired, or never valid API IDs). Saved settings using them are moved to the
-// current default; anything the user picked themselves is left alone.
-const STALE_DEFAULTS = new Set([
-  "claude-3-5-sonnet-latest",
-  "claude-sonnet-4-20250514",
-  "gemini-3.1-pro",
-  "gemini-2.5-pro",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-  "gpt-5.4-thinking",
-]);
+// Models that earlier CloakLM versions shipped as defaults or recommendations, mapped
+// tier-to-tier to today's equivalents (a Haiku user stays on Haiku). Applied once per
+// MODELS_VERSION, so a model the user picks afterwards is never changed again.
+export const MODELS_VERSION = "2026-10";
+const UPGRADES: Record<string, string> = {
+  "claude-3-5-sonnet-latest": "claude-sonnet-5-5",
+  "claude-sonnet-4-20250514": "claude-sonnet-5-5",
+  "claude-opus-4-6": "claude-opus-5-5",
+  "claude-sonnet-4-6": "claude-sonnet-5-5",
+  "claude-haiku-4-5": "claude-haiku-5-5",
+  "gemini-3.1-pro": "gemini-4-argon",
+  "gemini-3.1-pro-preview": "gemini-4-argon",
+  "gemini-3-flash-preview": "gemini-3.8-flash",
+  "gemini-2.5-pro": "gemini-4-argon",
+  "gemini-2.5-flash": "gemini-3.8-flash",
+  "gemini-2.5-flash-lite": "gemini-3.8-flash",
+  "gpt-5.4-thinking": "gpt-6.1-sol",
+  "gpt-5.2": "gpt-6.1-sol",
+  "gpt-5-mini": "gpt-6-luna",
+  "o4-mini": "gpt-6.1-sol",
+  "o3-mini": "gpt-6.1-sol",
+  "gpt-4o": "gpt-6.1-sol",
+};
 
-export function migrateActiveModels(saved?: Partial<Record<LLMProvider, string>>): Record<LLMProvider, string> {
+export function migrateActiveModels(
+  saved: Partial<Record<LLMProvider, string>> | undefined,
+  savedVersion: string | undefined,
+): Record<LLMProvider, string> {
   const result = { ...DEFAULT_MODELS };
   for (const p of Object.keys(result) as LLMProvider[]) {
     const id = saved?.[p];
-    if (id && !STALE_DEFAULTS.has(id)) result[p] = id;
+    if (!id) continue;
+    result[p] = savedVersion === MODELS_VERSION ? id : (UPGRADES[id] ?? id);
   }
   return result;
 }

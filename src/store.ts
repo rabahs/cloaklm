@@ -1,6 +1,6 @@
 import { load, Store } from '@tauri-apps/plugin-store';
 import type { AppSettings, ChatSession, LLMProvider, Project } from './types';
-import { migrateActiveModels } from './models';
+import { MODELS_VERSION, migrateActiveModels } from './models';
 
 // Create a single store instance for the app
 let storePromise: Promise<Store> | null = null;
@@ -17,12 +17,19 @@ export const loadSettingsStore = async (defaultSettings: AppSettings): Promise<A
     const saved = await store.get<AppSettings>('settings');
     // Ensure all nested fields exist to avoid crashes on old versions
     if (saved) {
-      return { 
-        ...defaultSettings, 
+      const merged: AppSettings = {
+        ...defaultSettings,
         ...saved,
-        activeModels: migrateActiveModels(saved.activeModels),
-        customModels: { ...defaultSettings.customModels, ...(saved.customModels as Record<LLMProvider, string[]> || {}) }
+        activeModels: migrateActiveModels(saved.activeModels, saved.modelsVersion),
+        customModels: { ...defaultSettings.customModels, ...(saved.customModels as Record<LLMProvider, string[]> || {}) },
+        modelsVersion: MODELS_VERSION,
       };
+      // Persist the upgrade right away so it runs only once
+      if (saved.modelsVersion !== MODELS_VERSION) {
+        await store.set('settings', merged);
+        await store.save();
+      }
+      return merged;
     }
   } catch (e) {
     console.error("Failed to load settings from secure store", e);

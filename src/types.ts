@@ -50,6 +50,8 @@ export interface AppSettings {
   ollamaUrl: string;
   activeModels?: Record<LLMProvider, string>;
   customModels?: Record<LLMProvider, string[]>;
+  /** Model-list version the saved model choices were last upgraded to. */
+  modelsVersion?: string;
   deepScan?: {
     enabled: boolean;
     model: string;

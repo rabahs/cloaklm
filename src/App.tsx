@@ -16,7 +16,7 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { callLLM, deepScanWithLLM } from "./llm";
 import type { Message, Attachment, LLMProvider, AppSettings, AppView, ChatSession, Project } from "./types";
 import { loadSettingsStore, saveSettingsStore, loadChatSessions, saveChatSessions, loadProjects, saveProjects } from "./store";
-import { DEFAULT_MODELS } from "./models";
+import { DEFAULT_MODELS, MODELS_VERSION } from "./models";
 import { EngineStatus, type EngineStage } from "./components/EngineStatus";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -24,6 +24,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   apiKeys: {},
   ollamaUrl: "http://localhost:11434",
   activeModels: { ...DEFAULT_MODELS },
+  modelsVersion: MODELS_VERSION,
   customModels: {
     claude: [], gemini: [], openai: [], ollama: []
   },

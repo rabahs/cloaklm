@@ -1,6 +1,6 @@
 # Disclaimer
 
-*Last updated: October 17, 2026. This is a draft and has not yet been reviewed by a lawyer.*
+*Last updated: October 17, 2026.*
 
 CloakLM is free, open-source software published by BitHunch LLC. By downloading or using it, you agree to the following.
 

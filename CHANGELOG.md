@@ -10,12 +10,18 @@ All notable changes to CloakLM. Download any version from [Releases](https://git
 - **The app could not start its anonymization engine** (since v0.3.2), so it showed "AI Engine failed to start" and could not process documents. Three causes, all fixed: the app looked for the engine in the wrong place, macOS blocked the engine from loading its bundled Python, and the engine could repeatedly start copies of itself.
 - W-2 box 12 codes (such as `D` for 401(k) contributions) were sometimes redacted as zip codes, so the AI lost information it needed.
 - Box labels like "15 State" and "17 State" were redacted as locations.
+- "Add custom model" did nothing.
+- Replies from current Claude models could come back blank, and OpenAI's reasoning models returned an error.
+- Settings still pointing at retired default models (such as Gemini 2.5 Flash, retiring October 20, 2026) move to current ones automatically.
+
+### Changed
+- **Redesigned home screen**: the message box sits in the center with recent projects right below it, with fewer lines and cleaner icons.
+- **Startup progress**: a progress bar shows each step while the privacy engine starts, instead of a blinking banner.
+- **Current models**: the picker recommends Claude Opus 5.5, Sonnet 5.5, Haiku 5.5, and Fable 5.1; Gemini 4 Argon and 3.8 Flash; GPT-6.1 Sol and GPT-6 Luna. Search to find any other model your API key can use.
+- Security policy now explains how to report vulnerabilities privately through GitHub.
 
 ### Security
 - **Websites could read documents through the local anonymization engine.** While the engine was running, a malicious web page open in your browser could ask it to process a PDF from your disk and read back the original, un-redacted text. The engine now answers only the CloakLM app itself, and rejects requests that use DNS rebinding to look local.
-
-### Changed
-- Security policy now explains how to report vulnerabilities privately through GitHub.
 
 ## [0.4.0] - 2026-04-06
 

@@ -171,8 +171,8 @@
             <script>
                 fetch('https://api.github.com/repos/rabahs/cloaklm/releases/latest')
                     .then(r => r.json())
-                    .then(d => { document.getElementById('version-badge').textContent = `${d.tag_name || 'v0.4.0'} Now Live`; })
-                    .catch(() => { document.getElementById('version-badge').textContent = 'v0.4.0 Now Live'; });
+                    .then(d => { document.getElementById('version-badge').textContent = `${d.tag_name || 'v0.4.1'} Now Live`; })
+                    .catch(() => { document.getElementById('version-badge').textContent = 'v0.4.1 Now Live'; });
             </script>
             <h1>Ask AI About Your Tax Forms. <br><span class="gradient-text">Keep Your SSN to Yourself.</span></h1>
             <p>CloakLM is a <strong>free, open-source desktop app</strong> that strips names, SSNs, and addresses from your PDFs <strong>on your device</strong>, then lets you chat with Claude, GPT, Gemini, or a fully offline model. W-2s, 1099s, medical bills, bank statements: the AI sees <code>[PERSON_1]</code>, you see the real names.</p>

@@ -187,7 +187,11 @@ jobs:
           out="SHA256SUMS-${{ matrix.target }}.txt"
           : > "$out"
           while IFS= read -r f; do
-            [ -f "$f" ] && (cd "$(dirname "$f")" && sum "$(basename "$f")") >> "$out"
-          done < <(echo "$ARTIFACTS" | jq -r '.[]')
+            # tauri-action reports Windows paths (D:\a\...); Git Bash needs /d/a/...
+            command -v cygpath >/dev/null && f="$(cygpath -u "$f")"
+            [ -f "$f" ] || { echo "missing artifact: $f"; exit 1; }
+            (cd "$(dirname "$f")" && sum "$(basename "$f")") >> "$out"
+          done < <(echo "$ARTIFACTS" | jq -r '.[]' | tr -d '\r')
+          [ -s "$out" ] || { echo "no artifacts to checksum"; exit 1; }
           cat "$out"
           gh release upload "$RELEASE_TAG" "$out" --clobber --repo "$GITHUB_REPOSITORY"

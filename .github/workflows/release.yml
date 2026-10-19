@@ -4,6 +4,7 @@ name: 'Publish Release'
 #   frontend  npm packages run here, with no secrets at all
 #   sidecar   only hash-locked Python packages; gets the code-signing certificate on macOS
 #   release   assembles, signs, notarizes and publishes; runs no npm or pip installs
+#   checksums hashes what was published
 # Every action is pinned to a commit. Update with care: these steps can read secrets.
 
 on:
@@ -171,27 +172,29 @@ jobs:
 
             **macOS:** This build is signed and notarized — no `xattr` workaround needed.
 
-            **Verify your download:** compare its SHA-256 with the `SHA256SUMS-*.txt` file attached to this release.
+            **Verify your download:** compare its SHA-256 with `SHA256SUMS.txt` attached to this release (`sha256sum -c SHA256SUMS.txt`).
           releaseDraft: false
           # Tags like v0.5.0-rc.1 publish as pre-releases, so "latest" (the site's download link) stays stable.
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
 
-      - name: publish checksums
-        shell: bash
+  checksums:
+    # Hashes the assets as published on the release (tauri-action renames them on
+    # upload), so `sha256sum -c SHA256SUMS.txt` works on what users download.
+    needs: [release]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: publish SHA256SUMS.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ARTIFACTS: ${{ steps.tauri.outputs.artifactPaths }}
         run: |
           set -euo pipefail
-          sum() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi; }
-          out="SHA256SUMS-${{ matrix.target }}.txt"
-          : > "$out"
-          while IFS= read -r f; do
-            # tauri-action reports Windows paths (D:\a\...); Git Bash needs /d/a/...
-            command -v cygpath >/dev/null && f="$(cygpath -u "$f")"
-            [ -f "$f" ] || { echo "missing artifact: $f"; exit 1; }
-            (cd "$(dirname "$f")" && sum "$(basename "$f")") >> "$out"
-          done < <(echo "$ARTIFACTS" | jq -r '.[]' | tr -d '\r')
-          [ -s "$out" ] || { echo "no artifacts to checksum"; exit 1; }
-          cat "$out"
-          gh release upload "$RELEASE_TAG" "$out" --clobber --repo "$GITHUB_REPOSITORY"
+          mkdir assets && cd assets
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"
+          rm -f SHA256SUMS*.txt
+          [ -n "$(ls)" ] || { echo "no release assets to checksum"; exit 1; }
+          sha256sum * > ../SHA256SUMS.txt
+          cat ../SHA256SUMS.txt
+          gh release upload "$RELEASE_TAG" ../SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"

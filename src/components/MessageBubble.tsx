@@ -1,6 +1,7 @@
 import type { Message } from "../types";
 import { AttachmentChip } from "./AttachmentChip";
-import { deAnonymize, getProviderDisplayName, getProviderIcon } from "../llm";
+import { getProviderDisplayName, getProviderIcon } from "../llm";
+import { rehydrateSegments } from "../redact";
 
 interface MessageBubbleProps {
   message: Message;
@@ -8,7 +9,10 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user";
-  const displayContent = deAnonymize(message.content, message.attachments || []);
+  // Restored values are marked so a planted "[PERSON_1]" in an answer can't pass
+  // off a real name as ordinary text; hover shows the placeholder and its document.
+  const segments = rehydrateSegments(message.content, message.attachments || []);
+  const displayContent = message.content;
 
   return (
     <div
@@ -58,7 +62,19 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                 : "bg-surface-elevated border border-border text-text-primary rounded-tl-sm"
             }`}
           >
-            {displayContent}
+            {segments.map((seg, i) =>
+              seg.ambiguous ? (
+                <span key={i} className="underline decoration-dotted decoration-warning" title={`Different in each document: ${seg.ambiguous.join(", ")}`}>
+                  {seg.text}
+                </span>
+              ) : seg.placeholder ? (
+                <span key={i} className="underline decoration-dotted underline-offset-2" title={`${seg.placeholder} from ${seg.source}`}>
+                  {seg.text}
+                </span>
+              ) : (
+                seg.text
+              )
+            )}
           </div>
         )}
 

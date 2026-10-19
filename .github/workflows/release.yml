@@ -1,126 +1,155 @@
 name: 'Publish Release'
 
+# Three jobs, so secrets only reach code that needs them:
+#   frontend  npm packages run here, with no secrets at all
+#   sidecar   only hash-locked Python packages; gets the code-signing certificate on macOS
+#   release   assembles, signs, notarizes and publishes; runs no npm or pip installs
+# Every action is pinned to a commit. Update with care: these steps can read secrets.
+
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build, e.g. v0.5.0'
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
-  publish-tauri:
+  frontend:
+    runs-on: ubuntu-latest
     permissions:
-      contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [macos-latest, windows-latest]
-
-    runs-on: ${{ matrix.platform }}
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
 
-      - name: setup node
-        uses: actions/setup-node@v4
+      - name: only release tags
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]] || { echo "Not a release tag: $RELEASE_TAG"; exit 1; }
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
-      - name: install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: install frontend dependencies (lockfile, no install scripts)
+        run: npm ci --ignore-scripts
 
-      - name: setup python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
+      - name: test
+        run: npm test
 
-      - name: install python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install pyinstaller
-          python -m pip install -r sidecar/requirements.txt --no-cache-dir
-        
-      - name: build sidecar binary
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          # Determine the target triplet for Tauri
-          if [ "${{ matrix.platform }}" == "macos-latest" ]; then
-            TARGET="aarch64-apple-darwin"
-          elif [ "${{ matrix.platform }}" == "windows-latest" ]; then
-            TARGET="x86_64-pc-windows-msvc"
-          else
-            TARGET="x86_64-unknown-linux-gnu"
-          fi
-
-          echo "Building sidecar for $TARGET..."
-          mkdir -p src-tauri/bin
-
-          cd sidecar
-          python -m PyInstaller --clean --noconfirm --onefile \
-            --name "cloaklm-sidecar-$TARGET" \
-            --collect-all docling \
-            --collect-all docling_core \
-            --collect-all docling_parse \
-            --collect-all gliner \
-            --collect-all uvicorn \
-            --collect-all fastapi \
-            --collect-all onnxruntime \
-            --collect-all tokenizers \
-            --collect-all torch \
-            --collect-all rich \
-            --collect-all huggingface_hub \
-            --collect-all safetensors \
-            --hidden-import transformers \
-            --hidden-import tokenizers \
-            --hidden-import tokenizers.tokenizers \
-            --hidden-import onnxruntime.capi.onnxruntime_pybind11_state \
-            --hidden-import onnxruntime.capi._pybind_state \
-            --copy-metadata docling-ibm-models \
-            --copy-metadata docling \
-            --copy-metadata docling-core \
-            --copy-metadata docling-parse \
-            server.py
-
-          echo "=== PyInstaller dist output ==="
-          ls -la dist/
-
-          mv "dist/cloaklm-sidecar-$TARGET"* "../src-tauri/bin/"
-          cd ..
-
-      - name: verify sidecar binary exists
-        shell: bash
-        run: |
-          echo "=== Contents of src-tauri/bin/ ==="
-          ls -la src-tauri/bin/
-
-          if [ "${{ matrix.platform }}" == "macos-latest" ]; then
-            TARGET="aarch64-apple-darwin"
-          elif [ "${{ matrix.platform }}" == "windows-latest" ]; then
-            TARGET="x86_64-pc-windows-msvc"
-          else
-            TARGET="x86_64-unknown-linux-gnu"
-          fi
-
-          EXPECTED="src-tauri/bin/cloaklm-sidecar-$TARGET"
-          if [ "${{ matrix.platform }}" == "windows-latest" ]; then
-            EXPECTED="${EXPECTED}.exe"
-          fi
-
-          if [ ! -f "$EXPECTED" ]; then
-            echo "ERROR: Sidecar binary not found at $EXPECTED"
-            exit 1
-          fi
-
-          echo "Sidecar binary verified: $EXPECTED ($(du -h "$EXPECTED" | cut -f1))"
-
-      - name: install frontend dependencies
-        run: npm install
-
-      - name: build frontend
+      - name: build frontend and MCP server
         run: npm run build
 
-      - uses: tauri-apps/tauri-action@v0.5.24
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: frontend
+          path: |
+            dist
+            src-tauri/resources/mcp
+          if-no-files-found: error
+
+  sidecar:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+
+      # Lets PyInstaller sign every bundled library with our Team ID, so the app
+      # needs no disable-library-validation entitlement.
+      - name: import signing certificate (macOS)
+        if: runner.os == 'macOS'
+        uses: apple-actions/import-codesign-certs@63fff01cd422d4b7b855d40ca1e9d34d2de9427d # v3.0.0
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: build sidecar (hash-locked dependencies)
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          CLOAKLM_SIGNING_IDENTITY: "${{ runner.os == 'macOS' && 'Developer ID Application: BitHunch LLC (V9MD2XLT56)' || '' }}"
+        run: bash sidecar/build_sidecar.sh
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sidecar-${{ matrix.target }}
+          path: src-tauri/bin
+          if-no-files-found: error
+
+  release:
+    needs: [frontend, sidecar]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: frontend
+          path: .
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: sidecar-${{ matrix.target }}
+          path: src-tauri/bin
+
+      # Artifacts don't keep file permissions; the app must be able to start the engine.
+      - name: make the sidecar executable
+        shell: bash
+        run: chmod +x src-tauri/bin/*
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      # The Tauri CLI from crates.io with its lockfile, instead of npm packages,
+      # so no npm code runs in the job that holds the signing secrets.
+      - name: install Tauri CLI
+        run: cargo install tauri-cli --version 2.10.1 --locked
+
+      - uses: tauri-apps/tauri-action@3b50ac4d4512105f96edbaa78a6e2f9392805589 # v0.5.24
+        id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -130,14 +159,35 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          args: --verbose
-          tagName: ${{ github.ref_name }}
-          releaseName: 'CloakLM ${{ github.ref_name }}'
+          tauriScript: cargo tauri
+          # dist/ comes from the frontend job; this config skips rebuilding it here.
+          args: --verbose --config src-tauri/tauri.release.conf.json
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: 'CloakLM ${{ env.RELEASE_TAG }}'
           releaseBody: |
-            ### CloakLM ${{ github.ref_name }}
+            ### CloakLM ${{ env.RELEASE_TAG }}
 
             See [CHANGELOG](https://github.com/rabahs/cloaklm/blob/main/CHANGELOG.md) for details.
 
             **macOS:** This build is signed and notarized — no `xattr` workaround needed.
+
+            **Verify your download:** compare its SHA-256 with the `SHA256SUMS-*.txt` file attached to this release.
           releaseDraft: false
-          prerelease: false
+          # Tags like v0.5.0-rc.1 publish as pre-releases, so "latest" (the site's download link) stays stable.
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
+
+      - name: publish checksums
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACTS: ${{ steps.tauri.outputs.artifactPaths }}
+        run: |
+          set -euo pipefail
+          sum() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi; }
+          out="SHA256SUMS-${{ matrix.target }}.txt"
+          : > "$out"
+          while IFS= read -r f; do
+            [ -f "$f" ] && (cd "$(dirname "$f")" && sum "$(basename "$f")") >> "$out"
+          done < <(echo "$ARTIFACTS" | jq -r '.[]')
+          cat "$out"
+          gh release upload "$RELEASE_TAG" "$out" --clobber --repo "$GITHUB_REPOSITORY"

@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { Attachment, RedactionEntry } from "../types";
+import { looksLikePersonalProfile, nextManualPlaceholder, replaceSelection, sharingClearance } from "../redact";
+import { anonymizePrompt } from "../llm";
 
 interface ReviewPanelProps {
   attachment: Attachment;
@@ -11,6 +13,14 @@ interface ReviewPanelProps {
   onDismissAllSuggestions?: (attachmentId: string) => void;
   deepScanEnabled?: boolean;
   deepScanModel?: string;
+  /** Local Ollama model for the identifiability check; undefined when none is available. */
+  identifiabilityModel?: string;
+  identifiabilityChecking?: boolean;
+  identifiabilityError?: string;
+  onRunIdentifiabilityCheck?: (attachmentId: string) => void;
+  deepScanRunning?: boolean;
+  onRunDeepScan?: (attachmentId: string) => void;
+  onApproveForSharing?: (attachmentId: string, approve: boolean) => void;
 }
 
 interface FloatingButton {
@@ -19,7 +29,7 @@ interface FloatingButton {
   text: string;
 }
 
-export function ReviewPanel({ attachment, onClose, onManualRedact, onAcceptSuggestion, onDismissSuggestion, onAcceptAllSuggestions, onDismissAllSuggestions, deepScanEnabled, deepScanModel }: ReviewPanelProps) {
+export function ReviewPanel({ attachment, onClose, onManualRedact, onAcceptSuggestion, onDismissSuggestion, onAcceptAllSuggestions, onDismissAllSuggestions, deepScanEnabled, deepScanModel, identifiabilityModel, identifiabilityChecking, identifiabilityError, onRunIdentifiabilityCheck, deepScanRunning, onRunDeepScan, onApproveForSharing }: ReviewPanelProps) {
   const [viewMode, setViewMode] = useState<"list" | "raw">("list");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
@@ -32,13 +42,19 @@ export function ReviewPanel({ attachment, onClose, onManualRedact, onAcceptSugge
   const map = attachment.redactionMap || {};
   const entries = Object.values(map);
 
-  // Count how many manual redactions already exist
-  const manualCount = entries.filter(e => e.category === "manual").length;
   const pendingSuggestions = (attachment.deepScanSuggestions || []).filter(s => s.status === "pending");
+  const identifyingFound = (attachment.deepScanSuggestions || []).filter(s => s.kind === "identifying").length;
+  const isProfile = looksLikePersonalProfile(attachment.fileName, attachment.anonymizedContent);
+  const clearance = sharingClearance(attachment);
+  // Approving means "I read what the AI will get", so it's offered only after the
+  // Raw Output to AI tab has been opened.
+  const [viewedRaw, setViewedRaw] = useState(false);
+  useEffect(() => { if (viewMode === "raw") setViewedRaw(true); }, [viewMode]);
 
   const handleCopy = useCallback(() => {
     if (!attachment.anonymizedContent) return;
-    navigator.clipboard.writeText(attachment.anonymizedContent).then(() => {
+    // Same final scrub as anything sent to an AI provider.
+    navigator.clipboard.writeText(anonymizePrompt(attachment.anonymizedContent, [attachment])).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -102,11 +118,10 @@ export function ReviewPanel({ attachment, onClose, onManualRedact, onAcceptSugge
 
     const selectedText = floatingBtn.text;
     const currentContent = attachment.anonymizedContent || "";
-    const placeholderNum = manualCount + 1;
-    const placeholder = `[MANUAL_${placeholderNum}]`;
+    const placeholder = nextManualPlaceholder(attachment.redactionMap);
 
-    // Replace ALL occurrences of the selected text
-    const newContent = currentContent.split(selectedText).join(placeholder);
+    // Replace every occurrence of the selected text
+    const newContent = replaceSelection(currentContent, selectedText, placeholder);
 
     const newEntry: RedactionEntry = {
       real_value: selectedText,
@@ -118,7 +133,7 @@ export function ReviewPanel({ attachment, onClose, onManualRedact, onAcceptSugge
     onManualRedact(attachment.id, selectedText, newContent, newEntry);
     setFloatingBtn(null);
     window.getSelection()?.removeAllRanges();
-  }, [floatingBtn, attachment, manualCount, onManualRedact]);
+  }, [floatingBtn, attachment, onManualRedact]);
 
   const totalMatches = searchQuery.trim().length >= 2 
     ? (attachment.anonymizedContent?.match(new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')) || []).length
@@ -364,6 +379,96 @@ export function ReviewPanel({ attachment, onClose, onManualRedact, onAcceptSugge
                 );
               })()}
 
+              {/* Sharing gate: what AI tools (MCP) may read */}
+              <div className={`bg-surface border rounded-xl p-4 space-y-2 ${clearance ? "border-success/40" : "border-border"}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-[11px] font-bold text-text-primary uppercase tracking-wider">🔌 Sharing with AI tools</h3>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${clearance ? "text-success bg-success/10" : "text-text-muted bg-surface-elevated"}`}>
+                    {clearance === "two-model" ? "✓ Checked by two models" : clearance === "manual" ? "✓ Approved by you" : "Not cleared"}
+                  </span>
+                </div>
+                <p className="text-[10px] text-text-muted leading-relaxed">
+                  In a shared project, AI tools can read this document only after a second, local model has checked it
+                  (Deep Scan or the identifiability check, with every suggestion handled) or after you approve it.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {onRunDeepScan && identifiabilityModel && (
+                    <button
+                      onClick={() => onRunDeepScan(attachment.id)}
+                      disabled={deepScanRunning || !attachment.anonymizedContent}
+                      className="text-[10px] font-bold px-2.5 py-1 bg-blue-500/10 text-blue-400 rounded-md hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                    >
+                      {deepScanRunning ? "Scanning…" : attachment.deepScannedAt ? "Run Deep Scan again" : "Run Deep Scan"}
+                    </button>
+                  )}
+                  {onApproveForSharing && (attachment.approvedForSharingAt ? (
+                    <button
+                      onClick={() => onApproveForSharing(attachment.id, false)}
+                      className="text-[10px] font-bold px-2.5 py-1 bg-surface-elevated text-text-secondary border border-border rounded-md hover:text-text-primary transition-colors"
+                    >
+                      Withdraw approval
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => onApproveForSharing(attachment.id, true)}
+                      disabled={!viewedRaw || !attachment.anonymizedContent}
+                      title={viewedRaw ? "" : "Read the Raw Output to AI tab first"}
+                      className="text-[10px] font-bold px-2.5 py-1 bg-success/10 text-success border border-success/20 rounded-md hover:bg-success/20 transition-colors disabled:opacity-40"
+                    >
+                      I've read the raw output: approve
+                    </button>
+                  ))}
+                </div>
+                {!viewedRaw && !attachment.approvedForSharingAt && (
+                  <p className="text-[10px] text-text-muted">To approve it yourself, read the Raw Output to AI tab first.</p>
+                )}
+                {pendingSuggestions.length > 0 && (
+                  <p className="text-[10px] text-warning">Redact or dismiss the {pendingSuggestions.length} suggestion{pendingSuggestions.length !== 1 ? "s" : ""} below to finish the check.</p>
+                )}
+              </div>
+
+              {/* Identifiability check: details that point to a person even with names hidden */}
+              <div className={`bg-surface border rounded-xl p-4 space-y-2 ${isProfile && !attachment.identifiabilityCheckedAt ? "border-warning/40" : "border-border"}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-[11px] font-bold text-text-primary uppercase tracking-wider">🕵️ Identifiability check</h3>
+                  {onRunIdentifiabilityCheck && identifiabilityModel && (
+                    <button
+                      onClick={() => onRunIdentifiabilityCheck(attachment.id)}
+                      disabled={identifiabilityChecking || !attachment.anonymizedContent}
+                      className="text-[10px] font-bold px-2.5 py-1 bg-primary/15 text-primary rounded-md hover:bg-primary/25 transition-colors disabled:opacity-50 shrink-0"
+                    >
+                      {identifiabilityChecking ? "Checking…" : attachment.identifiabilityCheckedAt ? "Run again" : "Run check"}
+                    </button>
+                  )}
+                </div>
+                {isProfile && !attachment.identifiabilityCheckedAt && (
+                  <p className="text-[11px] text-warning leading-relaxed">
+                    This looks like a résumé or bio. These can identify you even with your name hidden. Run this check before
+                    sharing it.
+                  </p>
+                )}
+                <p className="text-[10px] text-text-muted leading-relaxed">
+                  Looks for details someone could search to find who this is, such as project names, funding amounts with
+                  dates, and awards.{" "}
+                  {identifiabilityModel ? (
+                    <>Runs on your device with <span className="font-mono">{identifiabilityModel}</span>.</>
+                  ) : (
+                    <>Needs a local Ollama model. Start Ollama and pick a model under Settings → Deep Scan.</>
+                  )}
+                </p>
+                {identifiabilityChecking && (
+                  <p className="text-[10px] text-blue-400 animate-pulse">Reading the document… this can take a minute.</p>
+                )}
+                {identifiabilityError && <p className="text-[10px] text-danger">{identifiabilityError}</p>}
+                {attachment.identifiabilityCheckedAt && !identifiabilityChecking && (
+                  <p className="text-[10px] text-text-secondary">
+                    {identifyingFound > 0
+                      ? `Found ${identifyingFound} identifying detail${identifyingFound !== 1 ? "s" : ""}. Review them below.`
+                      : "No identifying details found. Still read the Raw Output to AI tab before sharing."}
+                  </p>
+                )}
+              </div>
+
               {entries.length === 0 && (!pendingSuggestions || pendingSuggestions.length === 0) ? (
                 <div className="text-center text-text-muted py-8 text-sm">
                   No PII detected in this document.
@@ -376,7 +481,7 @@ export function ReviewPanel({ attachment, onClose, onManualRedact, onAcceptSugge
                       <div className="mt-4 mb-2 bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 flex items-center justify-between">
                         <div>
                           <h3 className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
-                            🔍 Deep Scan found {pendingSuggestions.length} suggestion{pendingSuggestions.length !== 1 ? "s" : ""}
+                            🔍 {pendingSuggestions.length} suggestion{pendingSuggestions.length !== 1 ? "s" : ""} to review
                           </h3>
                         </div>
                         <div className="flex gap-1.5">
@@ -403,12 +508,13 @@ export function ReviewPanel({ attachment, onClose, onManualRedact, onAcceptSugge
                         <div key={suggestion.id} className="bg-surface border border-blue-500/20 rounded-lg p-3 flex flex-col gap-2">
                           <div className="flex justify-between items-center">
                             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full text-blue-400 bg-blue-500/10">
-                              🔍 {suggestion.category}
+                              {suggestion.kind === "identifying" ? "🕵️ Identifying" : "🔍"} · {suggestion.category}
                             </span>
                           </div>
                           <div className="text-sm text-text-primary px-2 border-l-2 border-blue-500/30 font-mono">
                             "{suggestion.text}"
                           </div>
+                          {suggestion.reason && <p className="text-[10px] text-text-muted px-2">{suggestion.reason}</p>}
                           <div className="flex gap-2 mt-1">
                             {onAcceptSuggestion && (
                               <button

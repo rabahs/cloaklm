@@ -83,6 +83,14 @@
         },
         {
             "@type": "Question",
+            "name": "Does redaction make my document anonymous?",
+            "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "No, and no tool can promise that. CloakLM removes personal identifiers such as names, Social Security numbers, addresses, emails and account numbers. For tax forms, that is usually what matters. But some documents identify you through what they say, even with every name hidden: a résumé that names a project you built, or a company described by its funding round and IPO year. For those, run the Identifiability check in the Review panel. It runs on your computer with a local model and suggests details to redact. Then read the Raw Output to AI tab before you send anything."
+            }
+        },
+        {
+            "@type": "Question",
             "name": "Are the messages I type anonymized too?",
             "acceptedAnswer": {
                 "@type": "Answer",
@@ -138,9 +146,7 @@
     <link rel="apple-touch-icon" href="assets/logo.png">
 
     <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/fonts.css">
 
     <link rel="stylesheet" href="style.css">
 </head>
@@ -167,13 +173,8 @@
     <!-- ======== HERO ======== -->
     <header class="hero">
         <div class="hero-content">
-            <div class="badge" id="version-badge">Loading...</div>
-            <script>
-                fetch('https://api.github.com/repos/rabahs/cloaklm/releases/latest')
-                    .then(r => r.json())
-                    .then(d => { document.getElementById('version-badge').textContent = `${d.tag_name || 'v0.4.1'} Now Live`; })
-                    .catch(() => { document.getElementById('version-badge').textContent = 'v0.4.1 Now Live'; });
-            </script>
+            <!-- Version stamped in at deploy time (deploy.yml), so visitors' browsers don't call GitHub. -->
+            <div class="badge" id="version-badge">v0.4.1 Now Live</div>
             <h1>Ask AI About Your Tax Forms. <br><span class="gradient-text">Keep Your SSN to Yourself.</span></h1>
             <p>CloakLM is a <strong>free, open-source desktop app</strong> that strips names, SSNs, and addresses from your PDFs <strong>on your device</strong>, then lets you chat with Claude, GPT, Gemini, or a fully offline model. W-2s, 1099s, medical bills, bank statements: the AI sees <code>[PERSON_1]</code>, you see the real names.</p>
             <div class="cta-group">
@@ -223,7 +224,7 @@
         <div class="showcase showcase-reverse">
             <div class="showcase-text">
                 <div class="showcase-label">Multi-Pass Redaction</div>
-                <h3>Two AI Passes. Zero PII Leaks.</h3>
+                <h3>Two AI Passes. Then You Check.</h3>
                 <p>Pass 1 uses GLiNER + IBM Docling to scan locally in seconds. Pass 2 deploys a local Ollama LLM to catch what rule-based models miss &mdash; names in unusual formats, partial SSNs, addresses without standard suffixes.</p>
                 <ul class="showcase-list">
                     <li>GLiNER NER + regex patterns for structured PII (SSN, EIN, email, phone, address)</li>
@@ -367,6 +368,10 @@
             <details class="faq-item glass-panel">
                 <summary>Does CloakLM guarantee that all my personal information is removed?</summary>
                 <p>No. Detection is automated and very good, but no tool catches everything, especially in scanned or unusual documents. That is why CloakLM shows you the exact text it will send before anything leaves your computer. Always check it. See the full <a href="https://github.com/rabahs/cloaklm/blob/main/DISCLAIMER.md" style="text-decoration: underline;">disclaimer</a>.</p>
+            </details>
+            <details class="faq-item glass-panel">
+                <summary>Does redaction make my document anonymous?</summary>
+                <p>No, and no tool can promise that. CloakLM removes personal identifiers such as names, Social Security numbers, addresses, emails and account numbers. For tax forms, that is usually what matters. But some documents identify you through what they say, even with every name hidden: a résumé that names a project you built, or a company described by its funding round and IPO year. For those, run the <strong>Identifiability check</strong> in the Review panel. It runs on your computer with a local model and suggests details to redact. Then read the “Raw Output to AI” tab before you send anything.</p>
             </details>
             <details class="faq-item glass-panel">
                 <summary>Are the messages I type anonymized too?</summary>

@@ -1,4 +1,5 @@
 import type { LLMProvider, Attachment, DeepScanSuggestion } from "./types";
+import { fileNameFragments, isLoopbackUrl, redactionRegex, rehydrateSegments, sanitizeUnicode } from "./redact";
 import { DEFAULT_MODELS } from "./models";
 
 // Provider configuration
@@ -41,17 +42,6 @@ export function getProviderIcon(provider: LLMProvider): string {
   return icons[provider];
 }
 
-// Strip invisible Unicode that PDF extractors inject.
-// Without this, PII hidden behind zero-width chars evades regex but LLMs read it.
-function sanitizeUnicode(text: string): string {
-  // Strip zero-width / invisible formatting characters
-  text = text.replace(/[\u200b\u200c\u200d\u200e\u200f\u00ad\u2060-\u2064\ufeff\ufff9-\ufffb\u034f\u061c\u115f\u1160\u17b4\u17b5\u180e]/g, "");
-  // Normalize exotic whitespace to plain space
-  text = text.replace(/[\u00a0\u2000-\u200a\u202f\u205f\u3000]/g, " ");
-  // NFC normalization (compose accented chars)
-  return text.normalize("NFC");
-}
-
 // Regex safety net patterns — independent of what the sidecar caught.
 // These run on every outbound prompt as a last line of defense.
 const SAFETY_NET_PATTERNS: { pattern: RegExp; placeholder: string }[] = [
@@ -59,10 +49,10 @@ const SAFETY_NET_PATTERNS: { pattern: RegExp; placeholder: string }[] = [
   { pattern: /\S*\[[A-Z_]+\d*\]@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, placeholder: "[EMAIL_REDACTED]" },
   // Emails
   { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, placeholder: "[EMAIL_REDACTED]" },
-  // SSNs (123-45-6789, 123 45 6789)
-  { pattern: /\b\d{3}[-\s]\d{2}[-\s]\d{4}\b/g, placeholder: "[SSN_REDACTED]" },
+  // SSNs (123-45-6789, 123 45 6789). Digit lookarounds, not \b: "SSN123-45-6789" has no word boundary.
+  { pattern: /(?<!\d)\d{3}[-\s]\d{2}[-\s]\d{4}(?!\d)/g, placeholder: "[SSN_REDACTED]" },
   // Phone numbers
-  { pattern: /\b(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b/g, placeholder: "[PHONE_REDACTED]" },
+  { pattern: /(?<!\d)(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)/g, placeholder: "[PHONE_REDACTED]" },
   // Street addresses (123 Main Street, 4567 Oak Dr.)
   { pattern: /\b\d{1,6}\s+(?:[A-Z][a-zA-Z]*\.?\s+){1,4}(?:Street|St\.?|Avenue|Ave\.?|Boulevard|Blvd\.?|Drive|Dr\.?|Road|Rd\.?|Lane|Ln\.?|Court|Ct\.?|Place|Pl\.?|Way|Circle|Cir\.?|Trail|Trl\.?|Terrace|Ter\.?|Parkway|Pkwy\.?)\b\.?/gi, placeholder: "[ADDRESS_REDACTED]" },
   // City, State ZIP
@@ -86,20 +76,16 @@ export function anonymizePrompt(text: string, attachments: Attachment[]): string
       // Also redact original and anonymized filenames to be safe
       [att.fileName, att.anonymizedFileName].forEach(name => {
         if (!name) return;
-        tokenMap.set(name.toLowerCase(), "[FILE_NAME]");
-        const parts = name.split(/[\s,._-]+/);
-        if (parts.length > 1) {
-          parts.forEach(p => {
-            const part = p.replace(/\.[^/.]+$/, ""); // Strip extension
-            if (part.length > 3) tokenMap.set(part.toLowerCase(), "[FILE_NAME]");
-          });
-        }
+        tokenMap.set(sanitizeUnicode(name).toLowerCase(), "[FILE_NAME]");
+        fileNameFragments(name).forEach(part => tokenMap.set(part, "[FILE_NAME]"));
       });
 
       if (!att.redactionMap) return;
       Object.values(att.redactionMap).forEach(entry => {
-        const real = entry.real_value.trim().toLowerCase();
-        if (real.length < 3) return;
+        // Same normalization as the text, or a name stored decomposed (NFD) wouldn't match.
+        const real = sanitizeUnicode(entry.real_value).trim().toLowerCase();
+        // Two-character values (initials, state codes) too: they only match as whole words.
+        if (real.length < 2) return;
 
         tokenMap.set(real, entry.placeholder);
 
@@ -117,15 +103,10 @@ export function anonymizePrompt(text: string, attachments: Attachment[]): string
 
     if (tokenMap.size > 0) {
       // Sort longest first to prioritize "John Doe" over "John"
-      const sortedTokens = Array.from(tokenMap.keys()).sort((a, b) => b.length - a.length);
-      const regexPattern = sortedTokens
-        .map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-        .join('|');
-      const regex = new RegExp(`(${regexPattern})`, 'gi');
+      const regex = redactionRegex(Array.from(tokenMap.keys()));
 
-      text = text.replace(regex, (match) => {
-        return tokenMap.get(match.toLowerCase()) || match;
-      });
+      // A match whose case folding doesn't round-trip still gets redacted, never sent as is.
+      text = text.replace(regex, (match) => tokenMap.get(match.toLowerCase()) || "[REDACTED]");
     }
   }
 
@@ -163,21 +144,11 @@ function buildSystemPrompt(attachments: Attachment[]): string {
 ${docs}`;
 }
 
-// De-anonymize: replace [PERSON_1] etc. with real values in the AI response
-export function deAnonymize(
-  text: string,
-  attachments: Attachment[]
-): string {
+// De-anonymize: replace [PERSON_1] etc. with real values in the AI response.
+// Placeholders that mean different things in different documents stay as they are.
+export function deAnonymize(text: string, attachments: Attachment[]): string {
   if (!text) return text;
-  let result = text;
-  for (const att of attachments) {
-    if (!att.redactionMap) continue;
-    for (const entry of Object.values(att.redactionMap)) {
-      // Replace all occurrences of the placeholder with the real value
-      result = result.split(entry.placeholder).join(entry.real_value);
-    }
-  }
-  return result;
+  return rehydrateSegments(text, attachments).map((s) => s.text).join("");
 }
 
 // ---------- Deep Scan with Local LLM ----------
@@ -225,8 +196,31 @@ export async function deepScanWithLLM(
   ollamaUrl: string,
   model: string
 ): Promise<DeepScanSuggestion[]> {
-  const prompt = DEEP_SCAN_PROMPT + anonymizedContent + "\n---";
+  assertLocalOllama(ollamaUrl);
+  const items = await askOllamaForSpans(DEEP_SCAN_PROMPT + anonymizedContent + "\n---", ollamaUrl, model);
+  return items.map((item) => ({
+    id: crypto.randomUUID(),
+    text: item.text,
+    category: item.category,
+    status: "pending" as const,
+  }));
+}
 
+// These scans read text that may still contain the very PII they look for.
+function assertLocalOllama(ollamaUrl: string): void {
+  if (!isLoopbackUrl(ollamaUrl)) {
+    throw new Error("Deep Scan and the identifiability check only run on Ollama on this computer (localhost).");
+  }
+}
+
+interface FoundSpan {
+  text: string;
+  category: string;
+  reason?: string;
+}
+
+// Sends one prompt to a local Ollama model and parses the JSON array it returns.
+async function askOllamaForSpans(prompt: string, ollamaUrl: string, model: string, numCtx?: number): Promise<FoundSpan[]> {
   const response = await fetch(`${ollamaUrl}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -234,11 +228,16 @@ export async function deepScanWithLLM(
       model,
       messages: [{ role: "user", content: prompt }],
       stream: false,
+      ...(numCtx ? { options: { num_ctx: numCtx } } : {}),
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`Deep Scan failed: ${response.status}`);
+    throw new Error(
+      response.status === 404
+        ? `The local model "${model}" isn't installed in Ollama. Pick another model under Settings → Deep Scan.`
+        : `Local model request failed: ${response.status}`
+    );
   }
 
   const data = await response.json();
@@ -251,18 +250,92 @@ export async function deepScanWithLLM(
   try {
     const parsed = JSON.parse(jsonMatch[0]);
     if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .filter((item: { text?: string; category?: string }) => item.text && item.category)
-      .map((item: { text: string; category: string }) => ({
-        id: crypto.randomUUID(),
-        text: item.text,
-        category: item.category,
-        status: "pending" as const,
-      }));
+    return parsed.filter(
+      (item: Partial<FoundSpan>): item is FoundSpan => typeof item?.text === "string" && !!item.text && typeof item.category === "string"
+    );
   } catch {
     return [];
   }
+}
+
+// ---------- Identifiability check with Local LLM ----------
+
+const IDENTIFIABILITY_PROMPT = `You review documents whose personal information was already redacted. Items in [SQUARE_BRACKETS] like [PERSON_1] or [ORG_2] are already hidden. Do NOT flag them.
+
+Your job: find details that could still reveal WHO this person is, or which company or school a placeholder hides, if someone searched the web for them. A name being hidden is not enough when the rest of the text points to one person.
+
+WHAT TO FLAG (copy the exact text as it appears, short as possible):
+- UNIQUE_NAME: names of specific products, games, apps, open-source projects, internal projects, publications, patents (e.g. "Starfall Odyssey", "Project Lantern")
+- DISTINCTIVE_FACT: facts that single out one company or event, especially money, dates and firsts together (e.g. "raised over $250M, went public in 2019", "acquired in 2017 for $120M", "first FDA-cleared hearing app")
+- AWARD: named awards, honors, rankings, competition results (e.g. "2011 Chairman's Excellence Award", "top Hacker News post with 500 points")
+- PRODUCT_TIE: product or technology names that reveal a hidden employer (e.g. "ABAP" alongside a hidden employer suggests SAP)
+- RARE_DETAIL: unusual personal details (e.g. "Started programming at age 9", a rare combination of spoken languages)
+
+WHAT TO IGNORE:
+- Anything in [SQUARE_BRACKETS]
+- Common skills, tools and languages: "Python", "React", "AWS", "SQL", "Agile"
+- Generic job titles and duties: "Senior Engineer", "led a team of 5"
+- Form labels, box numbers, dollar amounts on tax forms, tax years
+
+Return ONLY a JSON array of objects with "text" (exact substring of the document), "category" (one of the categories above) and "reason" (under 12 words, why it is identifying). No explanation. If nothing found, return [].
+
+EXAMPLE:
+Input: "[PERSON_1] built Starfall Odyssey, a 1998 PC game, then joined [ORG_3], which raised over $250M and went public in 2019. Skills: Python, SQL."
+Output: [{"text": "Starfall Odyssey", "category": "UNIQUE_NAME", "reason": "Searchable game title leads to its creator"}, {"text": "raised over $250M and went public in 2019", "category": "DISTINCTIVE_FACT", "reason": "Funding and IPO year identify the company"}]
+
+Document:
+---
+`;
+
+const IDENTIFIABILITY_CHUNK_CHARS = 6000;
+
+// Splits on paragraph breaks so each chunk fits a small local model's context.
+function chunkText(text: string, maxChars: number): string[] {
+  const chunks: string[] = [];
+  let current = "";
+  for (const para of text.split(/\n{2,}/)) {
+    if (current && current.length + para.length + 2 > maxChars) {
+      chunks.push(current);
+      current = "";
+    }
+    current = current ? `${current}\n\n${para}` : para;
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+/**
+ * Finds details that could identify the person even with names redacted (unique
+ * project names, funding figures with dates, awards). Runs on a local Ollama model,
+ * so nothing leaves the device. Results are suggestions for the Review panel.
+ */
+export async function identifiabilityCheckWithLLM(
+  anonymizedContent: string,
+  ollamaUrl: string,
+  model: string
+): Promise<DeepScanSuggestion[]> {
+  assertLocalOllama(ollamaUrl);
+  const seen = new Set<string>();
+  const suggestions: DeepScanSuggestion[] = [];
+  for (const chunk of chunkText(anonymizedContent, IDENTIFIABILITY_CHUNK_CHARS)) {
+    const items = await askOllamaForSpans(IDENTIFIABILITY_PROMPT + chunk + "\n---", ollamaUrl, model, 8192);
+    for (const item of items) {
+      const text = item.text.trim();
+      const key = text.toLowerCase();
+      // Keep only real, not-yet-redacted text from the document; models paraphrase.
+      if (text.length < 3 || seen.has(key) || !anonymizedContent.includes(text) || /^\[[A-Z_]+\d*\]$/.test(text)) continue;
+      seen.add(key);
+      suggestions.push({
+        id: crypto.randomUUID(),
+        text,
+        category: item.category,
+        status: "pending",
+        kind: "identifying",
+        reason: item.reason?.trim() || undefined,
+      });
+    }
+  }
+  return suggestions;
 }
 
 // ---------- Provider-specific API callers ----------
@@ -343,7 +416,8 @@ async function callGemini(
   systemPrompt: string
 ): Promise<string> {
   const config = PROVIDER_CONFIG.gemini;
-  const url = `${config.url}/${modelId || config.defaultModel}:generateContent?key=${apiKey}`;
+  // Key in a header, not the URL, where proxies and logs would record it.
+  const url = `${config.url}/${modelId || config.defaultModel}:generateContent`;
 
   const contents = messages.map((m) => ({
     role: m.role === "user" ? "user" : "model",
@@ -352,7 +426,7 @@ async function callGemini(
 
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents,
@@ -453,11 +527,18 @@ export interface LLMCallOptions {
   activeModel: string;
   messages: { role: string; content: string }[];
   attachments: Attachment[];
+  /**
+   * Every document the conversation has used. Earlier messages are scrubbed again
+   * on each turn; with only the active documents, a name typed while a document
+   * was active went out in clear once that document was unchecked or removed.
+   */
+  scrubAttachments?: Attachment[];
 }
 
 export async function callLLM(options: LLMCallOptions): Promise<string> {
   const { provider, apiKeys, ollamaUrl, activeModel, messages, attachments } =
     options;
+  const scrubWith = [...new Map([...attachments, ...(options.scrubAttachments || [])].map(a => [a.id, a])).values()];
 
   // --- PRIVACY GATEKEEPER START ---
   // 1. Build the document-context prompt
@@ -466,10 +547,10 @@ export async function callLLM(options: LLMCallOptions): Promise<string> {
   // 2. Anonymize and STRIP METADATA (Firewall Pass)
   // We explicitly only keep 'role' and 'content' to prevent 'hidden' PII leaks
   // like original filenames or local paths in the messages array.
-  const safeSystemPrompt = anonymizePrompt(rawSystemPrompt, attachments);
+  const safeSystemPrompt = anonymizePrompt(rawSystemPrompt, scrubWith);
   const rawMessages = messages.map(m => ({
     role: m.role,
-    content: anonymizePrompt(m.content, attachments)
+    content: anonymizePrompt(m.content, scrubWith)
   }));
   
   // 3. UNIVERSAL CONTEXT INJECTION (Global Fix)

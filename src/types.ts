@@ -19,6 +19,12 @@ export interface Attachment {
   redactionMap?: Record<string, RedactionEntry>;
   error?: string;
   deepScanSuggestions?: DeepScanSuggestion[];
+  /** When the identifiability check last ran on this document. */
+  identifiabilityCheckedAt?: string;
+  /** When Deep Scan (a second, local model) finished on this document. */
+  deepScannedAt?: string;
+  /** When the user approved this document for sharing with AI tools after reviewing it. */
+  approvedForSharingAt?: string;
 }
 
 export interface RedactionEntry {
@@ -34,6 +40,10 @@ export interface DeepScanSuggestion {
   text: string;
   category: string;
   status: "pending" | "accepted" | "dismissed";
+  /** "identifying": from the identifiability check, not missed PII. */
+  kind?: "pii" | "identifying";
+  /** Why the identifiability check flagged it. */
+  reason?: string;
 }
 
 export type LLMProvider = "claude" | "gemini" | "openai" | "ollama";
@@ -56,7 +66,6 @@ export interface AppSettings {
     enabled: boolean;
     model: string;
   };
-  storageDir?: string;
 }
 
 export interface Project {
@@ -65,6 +74,8 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   attachments: Record<string, Attachment>;
+  /** Redacted documents are readable by AI tools through the cloaklm MCP server. */
+  sharedWithTools?: boolean;
 }
 
 export interface ChatSession {

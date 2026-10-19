@@ -35,6 +35,7 @@ sidecar/*.spec
 src-tauri/target/
 src-tauri/binaries/
 src-tauri/bin/
+src-tauri/resources/mcp/
 bin/
 .claude/settings.local.json
 .claude/

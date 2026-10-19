@@ -11,13 +11,14 @@ import { HistoryView } from "./components/HistoryView";
 import { ProjectsView } from "./components/ProjectsView";
 import { ProjectDetailView } from "./components/ProjectDetailView";
 import { listen } from "@tauri-apps/api/event";
-import { save } from "@tauri-apps/plugin-dialog";
-import { writeTextFile } from "@tauri-apps/plugin-fs";
-import { callLLM, deepScanWithLLM } from "./llm";
+import { invoke } from "@tauri-apps/api/core";
+import { callLLM, deepScanWithLLM, identifiabilityCheckWithLLM } from "./llm";
 import type { Message, Attachment, LLMProvider, AppSettings, AppView, ChatSession, Project } from "./types";
 import { loadSettingsStore, saveSettingsStore, loadChatSessions, saveChatSessions, loadProjects, saveProjects } from "./store";
 import { DEFAULT_MODELS, MODELS_VERSION } from "./models";
 import { EngineStatus, type EngineStage } from "./components/EngineStatus";
+import { sidecarFetch, buildSharedDocuments, pushSharedDocuments } from "./sidecar";
+import { anonymizeFileName, nextManualPlaceholder, replaceSelection } from "./redact";
 
 const DEFAULT_SETTINGS: AppSettings = {
   provider: "claude",
@@ -57,7 +58,9 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [engineStatus, setEngineStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [engineStage, setEngineStage] = useState<EngineStage>('unpacking');
-  const [sidecarPort, setSidecarPort] = useState<number>(4321);
+  // Unknown until the shell reports the port the engine actually bound. Nothing is
+  // sent (and no token leaves the app) before then.
+  const [sidecarPort, setSidecarPort] = useState<number | null>(null);
   const [availableProviders, setAvailableProviders] = useState<LLMProvider[]>(["claude", "gemini", "openai", "ollama"]);
   const dragCounter = useRef(0);
 
@@ -155,7 +158,8 @@ function App() {
         if (isPath) formData.append("file_path", fileObj);
         else formData.append("file", fileObj);
 
-        const response = await fetch(`http://127.0.0.1:${sidecarPort}/api/process`, { method: "POST", body: formData });
+        if (sidecarPort === null) throw new Error("engine not ready");
+        const response = await sidecarFetch(sidecarPort, "/api/process", { method: "POST", body: formData });
         if (!response.ok) throw new Error(await response.text());
 
         const data = await response.json();
@@ -164,7 +168,7 @@ function App() {
           status: "ready" as const,
           redactionCount: data.redaction_count,
           anonymizedContent: data.anonymized_markdown,
-          anonymizedFileName: anonymizeString(fileName, data.redaction_map),
+          anonymizedFileName: anonymizeFileName(fileName, data.redaction_map),
           redactionMap: data.redaction_map,
         };
 
@@ -184,7 +188,7 @@ function App() {
               currentSettings.ollamaUrl,
               currentSettings.deepScan.model
             );
-            const scannedAtt: Attachment = { ...updatedAttachment, status: "ready", deepScanSuggestions: suggestions };
+            const scannedAtt: Attachment = { ...updatedAttachment, status: "ready", deepScanSuggestions: suggestions, deepScannedAt: new Date().toISOString() };
             setAttachments((prev) => prev.map((a) => (a.id === attachmentId ? scannedAtt : a)));
             setHistoryAttachments((prev) => ({ ...prev, [attachmentId]: scannedAtt }));
           } catch (e) {
@@ -208,13 +212,22 @@ function App() {
     const unlistenPromise = listen<number>("sidecar-ready", (event) => {
       setSidecarPort(event.payload);
     }).catch(() => null);
+    // A restarting engine gets a new port: forget the old one at once.
+    const unlistenDown = listen("sidecar-down", () => {
+      setSidecarPort(null);
+      setEngineStatus("loading");
+      setEngineStage("unpacking");
+    }).catch(() => null);
+    // The engine may have announced its port before this listener existed.
+    if (sidecarPort === null) invoke<number | null>("get_sidecar_port").then((port) => port && setSidecarPort(port)).catch(() => {});
     const unlistenStage = listen<string>("sidecar-stage", (event) => {
       setEngineStage((prev) => (prev === "ready" ? prev : (event.payload as EngineStage)));
     }).catch(() => null);
 
     const checkHealth = async () => {
+      if (sidecarPort === null) return;
       try {
-        const res = await fetch(`http://127.0.0.1:${sidecarPort}/health`);
+        const res = await sidecarFetch(sidecarPort, "/health");
         if (res.ok) { setEngineStatus('ready'); setEngineStage('ready'); clearInterval(interval); }
       } catch { attempts++; if (attempts > 60) { setEngineStatus('error'); setEngineStage('error'); clearInterval(interval); } }
     };
@@ -222,19 +235,8 @@ function App() {
     checkHealth();
     refreshAvailableProviders(settings);
     interval = window.setInterval(checkHealth, 2000);
-    return () => { clearInterval(interval); unlistenPromise.then(u => u && u()); unlistenStage.then(u => u && u()); };
+    return () => { clearInterval(interval); unlistenPromise.then(u => u && u()); unlistenDown.then(u => u && u()); unlistenStage.then(u => u && u()); };
   }, [refreshAvailableProviders, settings, sidecarPort]);
-
-  // --- Native Tauri drag & drop ---
-  useEffect(() => {
-    const unlistenEnter = listen('tauri://file-drop-hover', () => setIsDragging(true));
-    const unlistenLeave = listen('tauri://file-drop-cancelled', () => setIsDragging(false));
-    const unlistenDrop = listen<{paths: string[]}>('tauri://file-drop', (event) => {
-      setIsDragging(false); dragCounter.current = 0;
-      if (event.payload?.paths) handleFiles(event.payload.paths);
-    });
-    return () => { unlistenEnter.then(f => f()); unlistenLeave.then(f => f()); unlistenDrop.then(f => f()); };
-  }, [handleFiles]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); e.stopPropagation();
@@ -246,13 +248,6 @@ function App() {
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
-  const anonymizeString = (text: string, redactionMap: Record<string, import("./types").RedactionEntry> = {}) => {
-    let result = text;
-    for (const entry of Object.values(redactionMap)) {
-      if (entry.real_value.length > 2) result = result.split(entry.real_value).join(entry.placeholder);
-    }
-    return result;
-  };
 
   const handleManualRedact = useCallback(
     (attachmentId: string, _selectedText: string, newContent: string, newEntry: import("./types").RedactionEntry) => {
@@ -262,21 +257,21 @@ function App() {
           if (a.id !== attachmentId) return a;
           const key = `manual_${Date.now()}`;
           const newMap = { ...a.redactionMap, [key]: newEntry };
-          return { ...a, anonymizedContent: newContent, anonymizedFileName: anonymizeString(a.fileName, newMap), redactionCount: (a.redactionCount || 0) + 1, redactionMap: newMap };
+          return { ...a, anonymizedContent: newContent, anonymizedFileName: anonymizeFileName(a.fileName, newMap), redactionCount: (a.redactionCount || 0) + 1, redactionMap: newMap };
         })
       );
       setReviewingAttachment((prev) => {
         if (!prev || prev.id !== attachmentId) return prev;
         const key = `manual_${Date.now()}`;
         const newMap = { ...prev.redactionMap, [key]: newEntry };
-        return { ...prev, anonymizedContent: newContent, anonymizedFileName: anonymizeString(prev.fileName, newMap), redactionCount: (prev.redactionCount || 0) + 1, redactionMap: newMap };
+        return { ...prev, anonymizedContent: newContent, anonymizedFileName: anonymizeFileName(prev.fileName, newMap), redactionCount: (prev.redactionCount || 0) + 1, redactionMap: newMap };
       });
       setHistoryAttachments(prev => {
         const current = prev[attachmentId];
         if (!current) return prev;
         const key = `manual_${Date.now()}`;
         const newMap = { ...current.redactionMap, [key]: newEntry };
-        return { ...prev, [attachmentId]: { ...current, anonymizedContent: newContent, anonymizedFileName: anonymizeString(current.fileName, newMap), redactionCount: (current.redactionCount || 0) + 1, redactionMap: newMap } };
+        return { ...prev, [attachmentId]: { ...current, anonymizedContent: newContent, anonymizedFileName: anonymizeFileName(current.fileName, newMap), redactionCount: (current.redactionCount || 0) + 1, redactionMap: newMap } };
       });
 
       // Also update in project if this attachment belongs to one
@@ -285,19 +280,17 @@ function App() {
         const key = `manual_${Date.now()}`;
         const current = p.attachments[attachmentId];
         const newMap = { ...current.redactionMap, [key]: newEntry };
-        const updated = { ...p, updatedAt: new Date().toISOString(), attachments: { ...p.attachments, [attachmentId]: { ...current, anonymizedContent: newContent, anonymizedFileName: anonymizeString(current.fileName, newMap), redactionCount: (current.redactionCount || 0) + 1, redactionMap: newMap } } };
+        const updated = { ...p, updatedAt: new Date().toISOString(), attachments: { ...p.attachments, [attachmentId]: { ...current, anonymizedContent: newContent, anonymizedFileName: anonymizeFileName(current.fileName, newMap), redactionCount: (current.redactionCount || 0) + 1, redactionMap: newMap } } };
         return updated;
       }));
     },
-    [anonymizeString]
+    []
   );
 
   // --- Deep scan suggestion handlers ---
-  const updateAttachmentSuggestions = useCallback((attachmentId: string, updater: (suggestions: import("./types").DeepScanSuggestion[]) => import("./types").DeepScanSuggestion[]) => {
-    const update = (att: Attachment): Attachment => {
-      if (att.id !== attachmentId) return att;
-      return { ...att, deepScanSuggestions: updater(att.deepScanSuggestions || []) };
-    };
+  // Applies a change to one attachment wherever it lives (chat, history, review, projects).
+  const updateAttachment = useCallback((attachmentId: string, change: (att: Attachment) => Attachment) => {
+    const update = (att: Attachment): Attachment => (att.id === attachmentId ? change(att) : att);
     setAttachments(prev => prev.map(update));
     setHistoryAttachments(prev => {
       const current = prev[attachmentId];
@@ -311,15 +304,77 @@ function App() {
     }));
   }, []);
 
+  const updateAttachmentSuggestions = useCallback((attachmentId: string, updater: (suggestions: import("./types").DeepScanSuggestion[]) => import("./types").DeepScanSuggestion[]) => {
+    updateAttachment(attachmentId, att => ({ ...att, deepScanSuggestions: updater(att.deepScanSuggestions || []) }));
+  }, [updateAttachment]);
+
+  // --- Identifiability check (local Ollama) ---
+  const identifiabilityModel = availableProviders.includes("ollama")
+    ? settings.deepScan?.model || settings.activeModels?.ollama || undefined
+    : undefined;
+  const [checkingIdentifiability, setCheckingIdentifiability] = useState<Record<string, boolean>>({});
+  const [identifiabilityError, setIdentifiabilityError] = useState<Record<string, string>>({});
+
+  const handleIdentifiabilityCheck = useCallback(async (attachmentId: string) => {
+    const att = historyAttachments[attachmentId] || projects.flatMap(p => Object.values(p.attachments)).find(a => a.id === attachmentId)
+      || attachments.find(a => a.id === attachmentId);
+    if (!att?.anonymizedContent || !identifiabilityModel) return;
+
+    setCheckingIdentifiability(prev => ({ ...prev, [attachmentId]: true }));
+    setIdentifiabilityError(prev => ({ ...prev, [attachmentId]: "" }));
+    try {
+      const found = await identifiabilityCheckWithLLM(att.anonymizedContent, settings.ollamaUrl, identifiabilityModel);
+      updateAttachment(attachmentId, current => {
+        // Drop anything already suggested or already redacted.
+        const known = new Set((current.deepScanSuggestions || []).map(s => s.text.toLowerCase()));
+        const fresh = found.filter(s => !known.has(s.text.toLowerCase()) && current.anonymizedContent?.includes(s.text));
+        return {
+          ...current,
+          deepScanSuggestions: [...(current.deepScanSuggestions || []), ...fresh],
+          identifiabilityCheckedAt: new Date().toISOString(),
+        };
+      });
+    } catch (e) {
+      setIdentifiabilityError(prev => ({ ...prev, [attachmentId]: e instanceof Error ? e.message : "Check failed" }));
+    } finally {
+      setCheckingIdentifiability(prev => ({ ...prev, [attachmentId]: false }));
+    }
+  }, [historyAttachments, projects, attachments, identifiabilityModel, settings.ollamaUrl, updateAttachment]);
+
+  // Deep Scan on demand (also a second model for the sharing gate).
+  const [deepScanning, setDeepScanning] = useState<Record<string, boolean>>({});
+  const handleRunDeepScan = useCallback(async (attachmentId: string) => {
+    const att = historyAttachments[attachmentId] || projects.flatMap(p => Object.values(p.attachments)).find(a => a.id === attachmentId)
+      || attachments.find(a => a.id === attachmentId);
+    if (!att?.anonymizedContent || !identifiabilityModel) return;
+    setDeepScanning(prev => ({ ...prev, [attachmentId]: true }));
+    setIdentifiabilityError(prev => ({ ...prev, [attachmentId]: "" }));
+    try {
+      const found = await deepScanWithLLM(att.anonymizedContent, settings.ollamaUrl, identifiabilityModel);
+      updateAttachment(attachmentId, current => {
+        const known = new Set((current.deepScanSuggestions || []).map(s => s.text.toLowerCase()));
+        const fresh = found.filter(s => !known.has(s.text.toLowerCase()) && current.anonymizedContent?.includes(s.text));
+        return { ...current, deepScanSuggestions: [...(current.deepScanSuggestions || []), ...fresh], deepScannedAt: new Date().toISOString() };
+      });
+    } catch (e) {
+      setIdentifiabilityError(prev => ({ ...prev, [attachmentId]: e instanceof Error ? e.message : "Deep Scan failed" }));
+    } finally {
+      setDeepScanning(prev => ({ ...prev, [attachmentId]: false }));
+    }
+  }, [historyAttachments, projects, attachments, identifiabilityModel, settings.ollamaUrl, updateAttachment]);
+
+  const handleApproveForSharing = useCallback((attachmentId: string, approve: boolean) => {
+    updateAttachment(attachmentId, current => ({ ...current, approvedForSharingAt: approve ? new Date().toISOString() : undefined }));
+  }, [updateAttachment]);
+
   const handleAcceptSuggestion = useCallback((attachmentId: string, suggestionId: string) => {
     // Find the suggestion and create a manual redaction from it
     const att = historyAttachments[attachmentId] || Object.values(projects.flatMap(p => Object.values(p.attachments))).find(a => a.id === attachmentId);
     const suggestion = att?.deepScanSuggestions?.find(s => s.id === suggestionId);
     if (!suggestion || !att?.anonymizedContent) return;
 
-    const manualCount = Object.values(att.redactionMap || {}).filter(e => e.category === "manual").length;
-    const placeholder = `[MANUAL_${manualCount + 1}]`;
-    const newContent = att.anonymizedContent.split(suggestion.text).join(placeholder);
+    const placeholder = nextManualPlaceholder(att.redactionMap);
+    const newContent = replaceSelection(att.anonymizedContent, suggestion.text, placeholder);
     const newEntry: import("./types").RedactionEntry = { real_value: suggestion.text, placeholder, category: suggestion.category || "manual", source: "deep-scan", sourceModel: settings.deepScan?.model };
 
     handleManualRedact(attachmentId, suggestion.text, newContent, newEntry);
@@ -342,12 +397,11 @@ function App() {
 
     // Batch all replacements in one pass to avoid stale state
     let content = att.anonymizedContent;
-    const existingManual = Object.values(att.redactionMap || {}).filter(e => e.category === "manual").length;
     const newEntries: Record<string, import("./types").RedactionEntry> = {};
 
     pending.forEach((s, i) => {
-      const placeholder = `[MANUAL_${existingManual + i + 1}]`;
-      content = content.split(s.text).join(placeholder);
+      const placeholder = nextManualPlaceholder({ ...att.redactionMap, ...newEntries });
+      content = replaceSelection(content, s.text, placeholder);
       newEntries[`manual_${Date.now()}_${i}`] = {
         real_value: s.text,
         placeholder,
@@ -359,7 +413,7 @@ function App() {
 
     const newMap = { ...att.redactionMap, ...newEntries };
     const newCount = (att.redactionCount || 0) + pending.length;
-    const newFileName = anonymizeString(att.fileName, newMap);
+    const newFileName = anonymizeFileName(att.fileName, newMap);
 
     // Update all state sources atomically
     const updatedAtt: Attachment = {
@@ -379,7 +433,7 @@ function App() {
     setProjects(prev => prev.map(p =>
       p.attachments[attachmentId] ? { ...p, attachments: { ...p.attachments, [attachmentId]: updatedAtt } } : p
     ));
-  }, [historyAttachments, projects, settings, anonymizeString]);
+  }, [historyAttachments, projects, settings]);
 
   const handleDismissAllSuggestions = useCallback((attachmentId: string) => {
     updateAttachmentSuggestions(attachmentId, suggestions =>
@@ -438,8 +492,6 @@ function App() {
     if (messages.length === 0) return;
     try {
       const timestamp = new Date().toISOString().split('T')[0];
-      const filePath = await save({ filters: [{ name: 'Markdown', extensions: ['md'] }], defaultPath: `cloaklm_transcript_${timestamp}.md` });
-      if (!filePath) return;
       let content = `# CloakLM Chat Transcript\n\n**Date:** ${new Date().toLocaleString()}\n**Model:** \`${settings.activeModels?.[settings.provider] || 'unknown'}\`\n\n---\n\n`;
       messages.forEach(msg => {
         content += `## ${msg.role === 'user' ? '👤 USER' : '🤖 CLOAK-LLM'}\n\n${msg.content}\n\n`;
@@ -447,7 +499,8 @@ function App() {
         content += `---\n\n`;
       });
       content += `*Exported via CloakLM — Privacy-First LLM Interface*\n`;
-      await writeTextFile(filePath, content);
+      // The shell shows the save dialog and writes the file; the webview has no file access.
+      await invoke("export_transcript", { contents: content, fileName: `cloaklm_transcript_${timestamp}.md` });
     } catch (err) { console.error("Failed to export:", err); }
   };
 
@@ -546,6 +599,27 @@ function App() {
       return next;
     });
   }, []);
+
+  // --- Share redacted documents with AI tools (MCP) ---
+  // Re-sent on every change: covers sharing toggles, new documents, manual
+  // redactions, accepted deep-scan suggestions, and a restarted sidecar.
+  useEffect(() => {
+    if (engineStatus !== "ready" || sidecarPort === null) return;
+    const port = sidecarPort;
+    const documents = buildSharedDocuments(projects);
+    let cancelled = false;
+    let retry: number | undefined;
+    // A restarted sidecar announces its port just before it starts listening.
+    const push = (attempt: number) => {
+      pushSharedDocuments(port, documents).catch((e) => {
+        if (cancelled) return;
+        if (attempt < 10) retry = window.setTimeout(() => push(attempt + 1), 2000);
+        else console.warn("Could not update shared documents:", e);
+      });
+    };
+    push(0);
+    return () => { cancelled = true; clearTimeout(retry); };
+  }, [projects, sidecarPort, engineStatus]);
 
   // Save projects whenever they change from manual redaction
   useEffect(() => {
@@ -727,6 +801,13 @@ function App() {
           onDismissAllSuggestions={handleDismissAllSuggestions}
           deepScanEnabled={!!settings.deepScan?.enabled}
           deepScanModel={settings.deepScan?.model}
+          identifiabilityModel={identifiabilityModel}
+          identifiabilityChecking={!!checkingIdentifiability[reviewingAttachment.id]}
+          identifiabilityError={identifiabilityError[reviewingAttachment.id] || undefined}
+          onRunIdentifiabilityCheck={handleIdentifiabilityCheck}
+          deepScanRunning={!!deepScanning[reviewingAttachment.id]}
+          onRunDeepScan={handleRunDeepScan}
+          onApproveForSharing={handleApproveForSharing}
         />
       )}
     </div>

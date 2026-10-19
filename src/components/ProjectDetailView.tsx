@@ -1,17 +1,21 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import type { Project, Attachment, ChatSession, Message, LLMProvider, AppSettings, RedactionEntry } from "../types";
+import type { Project, Attachment, ChatSession, Message, LLMProvider, AppSettings } from "../types";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { WelcomeScreen } from "./WelcomeScreen";
 import { DropOverlay } from "./DropOverlay";
 import { callLLM, deepScanWithLLM } from "../llm";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { sidecarFetch, shareableDocs } from "../sidecar";
+import { RehydratePanel } from "./RehydratePanel";
+import { anonymizeFileName, looksLikePersonalProfile, sharingClearance } from "../redact";
 
 interface ProjectDetailViewProps {
   project: Project;
   chatSessions: ChatSession[];
   settings: AppSettings;
-  sidecarPort: number;
+  /** null until the engine has reported its port. */
+  sidecarPort: number | null;
   engineStatus: "loading" | "ready" | "error";
   onBack: () => void;
   onUpdateProject: (updater: Project | ((prev: Project) => Project)) => void;
@@ -52,6 +56,7 @@ export function ProjectDetailView({
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const [confirmDeleteDoc, setConfirmDeleteDoc] = useState<Attachment | null>(null);
   const [confirmDeleteChat, setConfirmDeleteChat] = useState<string | null>(null);
+  const [showRehydrate, setShowRehydrate] = useState(false);
 
   const projectChats = chatSessions.filter((s) => s.projectId === project.id);
   const projectDocs = Object.values(project.attachments);
@@ -141,6 +146,12 @@ export function ProjectDetailView({
           activeModel: settings.activeModels?.[provider] || "unknown",
           messages: [...messages, userMessage].map((m) => ({ role: m.role, content: m.content })),
           attachments: activeAtts,
+          // Every project document and every document earlier turns used, so text
+          // typed while a now-unchecked or deleted document was active stays scrubbed.
+          scrubAttachments: [
+            ...Object.values(project.attachments),
+            ...messages.flatMap((m) => m.attachments || []),
+          ],
         });
 
         const aiMessage: Message = {
@@ -171,17 +182,6 @@ export function ProjectDetailView({
     },
     [messages, provider, settings, getActiveAttachments, pendingAttachments]
   );
-
-  // Anonymize string helper
-  const anonymizeString = (text: string, redactionMap: Record<string, RedactionEntry> = {}) => {
-    let result = text;
-    for (const entry of Object.values(redactionMap)) {
-      if (entry.real_value.length > 2) {
-        result = result.split(entry.real_value).join(entry.placeholder);
-      }
-    }
-    return result;
-  };
 
   // File handling for project documents
   const handleProjectFiles = useCallback(
@@ -223,7 +223,8 @@ export function ProjectDetailView({
           if (isPath) formData.append("file_path", fileObj);
           else formData.append("file", fileObj);
 
-          const response = await fetch(`http://127.0.0.1:${sidecarPort}/api/process`, {
+          if (sidecarPort === null) throw new Error("engine not ready");
+          const response = await sidecarFetch(sidecarPort, "/api/process", {
             method: "POST",
             body: formData,
           });
@@ -236,7 +237,7 @@ export function ProjectDetailView({
             status: "ready",
             redactionCount: data.redaction_count,
             anonymizedContent: data.anonymized_markdown,
-            anonymizedFileName: anonymizeString(fileName, data.redaction_map),
+            anonymizedFileName: anonymizeFileName(fileName, data.redaction_map),
             redactionMap: data.redaction_map,
           };
 
@@ -252,7 +253,7 @@ export function ProjectDetailView({
                 settings.ollamaUrl,
                 settings.deepScan.model
               );
-              updateAtt({ ...readyAttachment, status: "ready", deepScanSuggestions: suggestions });
+              updateAtt({ ...readyAttachment, status: "ready", deepScanSuggestions: suggestions, deepScannedAt: new Date().toISOString() });
             } catch (e) {
               console.warn("Deep scan failed:", e);
               updateAtt(readyAttachment);
@@ -344,6 +345,35 @@ export function ProjectDetailView({
           </h1>
         </div>
         <div className="flex items-center gap-1" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+          <button
+            onClick={() =>
+              onUpdateProject((prev: Project) =>
+                prev.id !== project.id ? prev : { ...prev, sharedWithTools: !prev.sharedWithTools }
+              )
+            }
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all border ${
+              project.sharedWithTools
+                ? "border-success/40 bg-success/10 text-success"
+                : "border-border text-text-secondary hover:text-text-primary"
+            }`}
+            title={
+              project.sharedWithTools
+                ? "Redacted text of this project's documents is readable by AI tools connected in Settings. Click to stop sharing."
+                : "Let AI tools you connected in Settings (Claude, Codex…) read the redacted text of this project's documents"
+            }
+          >
+            {project.sharedWithTools ? "🔌 Shared with AI tools" : "🔌 Share with AI tools"}
+          </button>
+          {project.sharedWithTools && (
+            <button
+              onClick={() => setShowRehydrate(true)}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg text-text-secondary hover:text-text-primary transition-all"
+              title="Paste an answer from an AI tool and see it with the real values"
+            >
+              ↩︎ Rehydrate
+            </button>
+          )}
+          <div className="w-px h-4 bg-border mx-1" />
           {/* Tabs */}
           <button
             onClick={() => { setTab("documents"); setActiveChatId(null); setComposingNewChat(false); setMessages([]); }}
@@ -424,6 +454,28 @@ export function ProjectDetailView({
                             <span className="text-[10px] text-text-muted">
                               🛡️ {doc.redactionCount} PII
                             </span>
+                          )}
+                          {project.sharedWithTools && doc.status === "ready" && (
+                            sharingClearance(doc) ? (
+                              <span className="text-[10px] text-success font-semibold" title="AI tools can read the redacted text">🔌 Shared</span>
+                            ) : (
+                              <button
+                                onClick={() => onReviewAttachment(doc)}
+                                className="text-[10px] text-text-muted font-semibold hover:underline"
+                                title="AI tools can read it after a second model checks it or you approve it in Review"
+                              >
+                                🔌 Not shared yet: review
+                              </button>
+                            )
+                          )}
+                          {doc.status === "ready" && !doc.identifiabilityCheckedAt && looksLikePersonalProfile(doc.fileName, doc.anonymizedContent) && (
+                            <button
+                              onClick={() => onReviewAttachment(doc)}
+                              className="text-[10px] text-warning font-semibold hover:underline"
+                              title="Résumés and bios can identify you even with your name hidden"
+                            >
+                              🕵️ Check identifiability
+                            </button>
                           )}
                           {doc.deepScanSuggestions && doc.deepScanSuggestions.filter(s => s.status === "pending").length > 0 && (
                             <span className="text-[10px] text-warning font-semibold">
@@ -608,6 +660,8 @@ export function ProjectDetailView({
           onCancel={() => setConfirmDeleteChat(null)}
         />
       )}
+
+      {showRehydrate && <RehydratePanel docs={shareableDocs(project)} onClose={() => setShowRehydrate(false)} />}
     </div>
   );
 }

@@ -1,14 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "The main window gets core APIs only. Files, links, the sidecar and the store go through fixed-purpose commands in src/lib.rs, so injected script couldn't read or write arbitrary paths, run programs or open arbitrary URLs.",
   "windows": ["main"],
-  "permissions": [
-    "core:default",
-    "opener:default",
-    "shell:default",
-    "store:default",
-    "dialog:default",
-    "fs:default"
-  ]
+  "permissions": ["core:default"]
 }

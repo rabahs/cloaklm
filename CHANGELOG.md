@@ -2,6 +2,37 @@
 
 All notable changes to CloakLM. Download any version from [Releases](https://github.com/rabahs/cloaklm/releases).
 
+## [Unreleased]
+
+### Added
+- **Use your Claude, ChatGPT or Gemini subscription instead of an API key.** Connect Claude Desktop (one click), Claude Code, Codex CLI or Gemini CLI in **Settings → Connect AI tools**, then turn on **Share with AI tools** in a project. Your AI app reads only the redacted text; paste its answer into **Rehydrate** to see the real values. See the [setup guide](docs/ai-subscriptions.md).
+- **Documents are shared with AI tools only after a second check.** A second local model (Deep Scan or the identifiability check) must have reviewed a document, with every suggestion handled, or you approve it yourself after reading what the AI will get. **Run Deep Scan** is now available in the Review panel at any time.
+- **Identifiability check** in the Review panel: a local model looks for details that could reveal who a document is about even with names hidden, such as project names, funding amounts with dates, and awards. Résumés and bios get a reminder to run it.
+- Restored names in chat and Rehydrate are underlined; hover to see which placeholder and document they came from.
+
+### Fixed
+- **Names in Chinese, Japanese, Korean, Cyrillic, Arabic and Greek script were never redacted**, even when detected.
+- Redacting a short value cut into longer words ("CA" turned "Canadian" into "[LOCATION_1]nadian"). Short values now match only whole words; longer ones still match inside words, so "John123" and names in URLs are caught.
+- SSNs and phone numbers stuck to letters ("SSN123-45-6789") weren't redacted.
+- Invisible characters (direction marks, Unicode "tag" characters), fullwidth letters and lookalike Cyrillic letters could hide names from redaction.
+- A document containing text like "[PERSON_1]" could make CloakLM show a real name in the wrong place. Restored values that are ambiguous across documents are no longer guessed.
+- In project chats, a name you typed could be sent unredacted after you unchecked or removed the document it came from.
+- Numbers and common words in a file name were removed from the text sent to the AI (a file named `W2_2025.pdf` turned every "2025" into `[FILE_NAME]`).
+- Accepting several Deep Scan suggestions gave them all the same `[MANUAL_1]` placeholder.
+- **Export transcript** did nothing.
+
+### Security
+- **Other programs on your computer could read your documents through the local engine.** It now requires a secret key that changes every launch, handed over privately (not in environment variables). AI tools get a separate key that can only read redacted text from documents you cleared.
+- **The app could send its key to the wrong program** while the engine was starting. It now waits for the engine's real address.
+- **App data is encrypted.** Settings, API keys, chats and documents are stored encrypted with a key in your system keychain, instead of a plain file. Existing data is converted automatically.
+- **Crafted "PDFs" could reach other document parsers** with known file-reading attacks. Only real PDFs are accepted now, and the document libraries are updated.
+- **The engine contacted Hugging Face on every launch** and would load changed model files. Models are now pinned to known versions and loaded offline once downloaded, with telemetry off.
+- Deep Scan and the identifiability check only run on an Ollama on this computer.
+- The app window has a strict content security policy and no access to files, programs or arbitrary links; the Gemini API key is no longer put in URLs.
+- The macOS engine is signed with the app's Developer ID, so the app no longer needs an exception to macOS library checks.
+- Releases are built with locked, hash-checked dependencies and pinned build actions, with signing kept apart from third-party build code. Each release publishes SHA-256 checksums.
+- The website no longer loads Google Fonts or calls GitHub from your browser.
+
 ## [0.4.1] - 2026-10-17
 
 **Critical fix and security update. All users should upgrade.**

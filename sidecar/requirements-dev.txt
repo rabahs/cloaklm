@@ -1,0 +1,2 @@
+# Test-only dependencies (python -m unittest sidecar/test_shared_docs.py)
+httpx

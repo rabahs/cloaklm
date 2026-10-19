@@ -1,15 +1,30 @@
-# Required for CloakLM PDF Ingestion
-docling>=1.1.0
+# Direct dependencies of the CloakLM sidecar. Builds install from requirements.lock
+# (exact versions with hashes); regenerate it after changing this file:
+#   .venv/bin/python -m uv pip compile sidecar/requirements.txt --universal --python-version 3.12 \
+#     --generate-hashes -o sidecar/requirements.lock
 
-# Required for CloakLM PII Anonymization (Local AI)
-gliner>=0.2.1
-torch>=2.0.0
+# PDF ingestion (>=2.131: security fixes; PDF-only input is enforced in server.py)
+docling>=2.140.0
+docling-core>=2.74.1
+lxml>=6.1.0
+pillow>=12.3.0
 
-# Logging and formatting (optional but useful)
+# PII anonymization (local AI). GLiNER requires transformers<5.2; the model
+# revision is pinned and loaded offline once cached (see server.py).
+gliner>=0.2.29
+torch>=2.11.0
+transformers>=4.57.6,<5.2
+huggingface_hub
+onnxruntime
 rich
 
-# Local Server (Tauri Sidecar)
-fastapi>=0.111.0
+# Local server (Tauri sidecar)
+fastapi>=0.146.0
+starlette>=1.3.1
 uvicorn[standard]>=0.30.0
 pydantic>=2.7.0
-python-multipart
+python-multipart>=0.0.31
+urllib3>=2.8.0
+
+# Build
+pyinstaller

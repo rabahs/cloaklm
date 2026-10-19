@@ -1,0 +1,37 @@
+{
+  "manifest_version": "0.3",
+  "name": "cloaklm",
+  "display_name": "CloakLM",
+  "version": "0.4.1",
+  "description": "Read documents you redacted with CloakLM. Only redacted text leaves the app.",
+  "long_description": "Connects Claude to the CloakLM desktop app. Documents you share from a CloakLM project (with \"Share with AI tools\") are readable here, with personal information replaced by placeholders such as [PERSON_1]. Real values and redaction maps never leave CloakLM; paste Claude's answer into CloakLM's Rehydrate panel to see it with the real values. CloakLM must be running.",
+  "author": {
+    "name": "Rabah Shihab",
+    "url": "https://github.com/rabahs/cloaklm"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rabahs/cloaklm"
+  },
+  "homepage": "https://github.com/rabahs/cloaklm",
+  "license": "MIT",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.cjs",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.cjs"]
+    }
+  },
+  "tools": [
+    { "name": "list_documents", "description": "List the redacted documents shared from CloakLM" },
+    { "name": "read_document", "description": "Read the redacted text of one shared document" },
+    { "name": "search_documents", "description": "Search across shared documents" }
+  ],
+  "keywords": ["privacy", "redaction", "pdf", "taxes", "pii"],
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": { "node": ">=18.0.0" }
+  }
+}

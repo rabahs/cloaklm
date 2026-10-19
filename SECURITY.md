@@ -28,6 +28,9 @@ In scope:
 
 - Un-redacted text or real values leaving the device (to an AI provider or anywhere else)
 - Other programs or websites reaching the local anonymization engine (the sidecar)
+- AI tools connected through the CloakLM MCP server reading anything other than the redacted text of cleared documents in projects shared with them
+- A document reaching AI tools before it was checked by two models or approved by the user
+- Anything in a document causing CloakLM itself to run code, read other files, or contact the network
 - Ways to bypass the outbound PII scrub on messages
 - Exposure of stored API keys or chat history
 

@@ -113,7 +113,9 @@ async function fetchOpenAI(apiKey: string): Promise<ModelOption[]> {
 }
 
 async function fetchGemini(apiKey: string): Promise<ModelOption[]> {
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000&key=${apiKey}`);
+  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", {
+    headers: { "x-goog-api-key": apiKey },
+  });
   if (!res.ok) return [];
   const data = await res.json();
   return (data.models || [])

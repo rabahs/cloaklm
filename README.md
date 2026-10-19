@@ -22,7 +22,8 @@
 Dollar amounts and document structure stay intact, so the AI can still do the math. Before anything is sent, you can review every redaction and add your own.
 
 > [!IMPORTANT]
-> Automated redaction can miss things. Always check the **Raw Output to AI** tab before sending. CloakLM is not tax or legal advice. See the [Disclaimer](./DISCLAIMER.md).
+> Automated redaction can miss things. Always check the **Raw Output to AI** tab before sending.
+> CloakLM removes personal identifiers; it does not make a document anonymous. Résumés and bios can identify you through details like project names or a company's funding history, so run the **Identifiability check** in the Review panel on those. CloakLM is not tax or legal advice. See the [Disclaimer](./DISCLAIMER.md).
 
 <p>
   <img src="site/assets/redaction_review.png" width="49%" alt="Redaction review panel listing detected names and addresses">
@@ -72,13 +73,31 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r sidecar/requirements.txt
 
-# 3. Start the anonymization engine (Terminal 1)
-source .venv/bin/activate
-cd sidecar && uvicorn server:app --port 4321
+# 3. Build the anonymization engine (again after changing anything in sidecar/)
+pip install -r sidecar/requirements-dev.txt
+bash sidecar/build_sidecar.sh
 
-# 4. Start the desktop app (Terminal 2)
+# 4. Start the desktop app; it starts the engine and hands it its access tokens
 npm run tauri dev
+
+# Tests
+npm test                                                   # frontend + MCP server
+(cd sidecar && python -m unittest discover -p "test_*.py")  # engine
+(cd src-tauri && cargo test)                               # encrypted store
+node scripts/e2e_sharing_gate.mjs                          # sharing gate through the UI (see the file for prerequisites)
 ```
+
+### Use your Claude, ChatGPT or Gemini subscription (no API key)
+If you already use Claude Desktop, Claude Code, Codex CLI or Gemini CLI, connect it to CloakLM:
+
+1. In **Settings → Connect AI tools**, click **Install in Claude Desktop**, or copy the snippet for your CLI. The CLIs need Node.js 18+.
+2. Open a project and turn on **🔌 Share with AI tools**.
+3. Ask your AI app about your documents ("summarize my W-2"). It sees only the redacted text, such as `[PERSON_1]`.
+4. Paste its answer into the project's **↩︎ Rehydrate** panel to see it with the real values.
+
+CloakLM must be open while you chat. **[Step-by-step setup guide with screenshots →](docs/ai-subscriptions.md)**
+
+Building from source? `npm run build:mcp` builds the MCP server (it also runs as part of `npm run dev` and `npm run build`).
 
 ### Configure API Keys
 Click ⚙️ in the app header to add your API keys for:

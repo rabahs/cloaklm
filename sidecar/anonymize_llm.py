@@ -93,7 +93,9 @@ def is_whitelisted(text: str) -> bool:
 def is_plausible(text: str, category: str) -> bool:
     """Reject GLiNER guesses whose shape can't be that kind of PII
     (e.g. the box 12 code "D" labeled as a zip code)."""
-    alnum = re.sub(r'[^A-Za-z0-9]', '', text)
+    # Letters and digits in any script: "[^A-Za-z0-9]" threw away every
+    # Chinese, Cyrillic, Arabic, Greek or Korean name GLiNER found.
+    alnum = [c for c in text if c.isalnum()]
     if len(alnum) < 2:
         return False
     if category == "ZIP":
@@ -131,6 +133,9 @@ LABEL_MAP = {
 
 SINGLE_PLACEHOLDER_CATEGORIES = {"SSN_REDACTED"}
 
+GLINER_MODEL = "knowledgator/gliner-pii-small-v1.0"
+GLINER_REVISION = "d21aad5b4a7ec82b3d0970fd1ac74a12c087d85e"
+
 # The labels we ask GLiNER to detect
 DETECTION_LABELS = [
     "person",
@@ -156,13 +161,15 @@ class GLiNERAnonymizer:
     that runs locally on CPU. ~300MB, no Ollama, no cloud.
     """
 
-    def __init__(self, model_name: str = "knowledgator/gliner-pii-small-v1.0",
-                 threshold: float = 0.3):
+    def __init__(self, model_name: str = None, threshold: float = 0.3):
         from gliner import GLiNER
 
+        model_name = model_name or GLINER_MODEL
         console.print(f"[dim]Loading GLiNER model: {model_name}[/dim]")
         console.print("[dim](First run downloads ~300MB — cached after that)[/dim]")
-        self.model = GLiNER.from_pretrained(model_name)
+        # Pinned to a known commit: an unpinned "main" would pull whatever the model
+        # repository holds today, and GLiNER loads it with trust_remote_code.
+        self.model = GLiNER.from_pretrained(model_name, revision=GLINER_REVISION if model_name == GLINER_MODEL else None)
         self.threshold = threshold
 
         self.redaction_map = {}
@@ -235,39 +242,7 @@ class GLiNERAnonymizer:
         This is the #1 cause of PII that "leaks" to the LLM but can't be
         found in the Review Panel.
         """
-        # Normalize to NFC (compose accented characters)
-        text = unicodedata.normalize("NFC", text)
-        # Strip zero-width and invisible formatting characters
-        _INVISIBLE = re.compile(
-            "["
-            "\u200b"  # zero-width space
-            "\u200c"  # zero-width non-joiner
-            "\u200d"  # zero-width joiner
-            "\u200e"  # left-to-right mark
-            "\u200f"  # right-to-left mark
-            "\u00ad"  # soft hyphen
-            "\u2060"  # word joiner
-            "\u2061"  # function application
-            "\u2062"  # invisible times
-            "\u2063"  # invisible separator
-            "\u2064"  # invisible plus
-            "\ufeff"  # BOM / zero-width no-break space
-            "\ufff9"  # interlinear annotation anchor
-            "\ufffa"  # interlinear annotation separator
-            "\ufffb"  # interlinear annotation terminator
-            "\u034f"  # combining grapheme joiner
-            "\u061c"  # Arabic letter mark
-            "\u115f"  # Hangul Choseong Filler
-            "\u1160"  # Hangul Jungseong Filler
-            "\u17b4"  # Khmer vowel inherent Aq
-            "\u17b5"  # Khmer vowel inherent Aa
-            "\u180e"  # Mongolian vowel separator
-            "]"
-        )
-        text = _INVISIBLE.sub("", text)
-        # Normalize whitespace: replace non-breaking spaces, thin spaces, etc.
-        text = re.sub(r"[\u00a0\u2000-\u200a\u202f\u205f\u3000]", " ", text)
-        return text
+        return sanitize_unicode(text)
 
     def anonymize(self, text: str) -> str:
         """Detect and replace all PII using GLiNER."""
@@ -278,6 +253,10 @@ class GLiNERAnonymizer:
         # Without this, PII hidden behind zero-width chars evades both
         # GLiNER and regex, but LLMs still read it.
         text = self._sanitize_unicode(text)
+
+        # A document that already contains "[PERSON_1]" would collide with our
+        # placeholders, and rehydration would then put a real value there.
+        text = neutralize_placeholders(text)
 
         # GLiNER has a max token limit. Process in chunks (by line groups)
         # to handle longer documents while preserving context.
@@ -298,12 +277,12 @@ class GLiNERAnonymizer:
             if is_whitelisted(m.group()):
                 return m.group()
             return self._get_placeholder(m.group(), "SSN_REDACTED")
-        text = re.sub(r'\b\d{3}[-\s]\d{2}[-\s]\d{4}\b', _ssn, text)
+        text = re.sub(NOT_AFTER_DIGIT + r'\d{3}[-\s]\d{2}[-\s]\d{4}' + NOT_BEFORE_DIGIT, _ssn, text)
 
         # EINs (12-3456789)
         def _ein(m):
             return self._get_placeholder(m.group(), "EIN")
-        text = re.sub(r'\b\d{2}-\d{7}\b', _ein, text)
+        text = re.sub(NOT_AFTER_DIGIT + r'\d{2}-\d{7}' + NOT_BEFORE_DIGIT, _ein, text)
 
         # Emails
         def _email(m):
@@ -316,14 +295,14 @@ class GLiNERAnonymizer:
         def _phone(m):
             return self._get_placeholder(m.group(), "PHONE")
         text = re.sub(
-            r'\b(\+1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b',
+            NOT_AFTER_DIGIT + r'(\+1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}' + NOT_BEFORE_DIGIT,
             _phone, text)
 
         # Account numbers (XXXX-1234, ***1234)
         def _acct(m):
             return self._get_placeholder(m.group(), "ACCOUNT")
-        text = re.sub(r'\b[Xx]{3,}[-\s]?\d{4}\b', _acct, text)
-        text = re.sub(r'\*{3,}\d{4}\b', _acct, text)
+        text = re.sub(r'\b[Xx]{3,}[-\s]?\d{4}' + NOT_BEFORE_DIGIT, _acct, text)
+        text = re.sub(r'\*{3,}\d{4}' + NOT_BEFORE_DIGIT, _acct, text)
 
         # Street addresses (123 Main Street, 4567 Oak Dr., etc.)
         _STREET_SUFFIXES = (
@@ -369,11 +348,37 @@ class GLiNERAnonymizer:
             r'\b[A-Za-z0-9._%+-]+@\[[A-Z_]+\d*\]\.[A-Za-z]{2,}\b',
             _partial_email, text)
 
+        # --- NAME PARTS NEXT TO A DETECTED NAME ---
+        # GLiNER sometimes catches only half a name ("Jordan [PERSON_1]"); a
+        # capitalized word right next to a person placeholder is almost always
+        # another part of the same name.
+        text = self._redact_adjacent_name_parts(text)
+
         # --- FINAL GLOBAL REDACTION PASS ---
         # Ensure any PII caught anywhere is redacted EVERYWHERE else,
         # protecting against chunking misses.
         text = self._global_redact_pass(text)
 
+        return text
+
+    def _redact_adjacent_name_parts(self, text: str) -> str:
+        def keep(word: str) -> bool:
+            return word.lower() in NAME_NEIGHBOUR_WORDS or is_whitelisted(word)
+
+        def before(m):
+            word = m.group(1)
+            return m.group(0) if keep(word) else self._get_placeholder(word, "PERSON") + m.group(2)
+
+        def after(m):
+            word = m.group(3)
+            return m.group(0) if keep(word) else m.group(1) + m.group(2) + self._get_placeholder(word, "PERSON")
+
+        for _ in range(3):  # "Mary Ann Jordan [PERSON_1]" takes a few rounds
+            updated = _NAME_BEFORE_PERSON.sub(before, text)
+            updated = _NAME_AFTER_PERSON.sub(after, updated)
+            if updated == text:
+                break
+            text = updated
         return text
 
     def _global_redact_pass(self, text: str) -> str:
@@ -425,10 +430,104 @@ class GLiNERAnonymizer:
         # 3. Perform the sweep
         for real_val, placeholder in all_tokens:
             if len(real_val) < 2: continue
-            pattern = re.compile(re.escape(real_val), re.IGNORECASE)
-            text = pattern.sub(placeholder, text)
+            text = value_pattern(real_val).sub(placeholder, text)
 
         return text
+
+
+# Number patterns check for neighbouring digits rather than word boundaries:
+# "\b" missed "SSN123-45-6789" because "N1" is not a word boundary.
+NOT_AFTER_DIGIT = r"(?<!\d)"
+NOT_BEFORE_DIGIT = r"(?!\d)"
+
+_SHORT_ASCII = re.compile(r"[A-Za-z0-9]{1,3}")
+
+
+def value_pattern(value: str) -> "re.Pattern[str]":
+    """How a known PII value is found elsewhere in the text.
+
+    Short ASCII values ("CA", "Bay") must stand alone, so a detected "CA" no
+    longer turns "Canadian" into "[LOCATION_1]nadian". Everything longer is
+    matched anywhere, so "John123", "johnsmith" in a URL, and names in
+    Chinese or Japanese text without spaces are still caught. Over-redacting
+    "Johnson" is the safe failure.
+    """
+    escaped = re.escape(value)
+    if _SHORT_ASCII.fullmatch(value.strip()):
+        return re.compile(r"(?<![^\W_])" + escaped + r"(?![^\W_])", re.IGNORECASE)
+    return re.compile(escaped, re.IGNORECASE)
+
+
+# Characters that render as nothing (or as a blank) but that language models
+# still read: zero-width and bidi controls, Unicode "tag" characters (used to
+# smuggle hidden ASCII), variation selectors, and Hangul fillers.
+_INVISIBLE_EXTRA = re.compile(
+    "[͏ᅟᅠ឴឵᠎ㅤﾠ︀-️"
+    "\U000e0000-\U000e007f\U000e0100-\U000e01ef]"
+)
+
+# Cyrillic and Greek letters that look like Latin ones. Folded only inside
+# words that mix them with Latin letters ("Jоhn" with a Cyrillic "о"), so real
+# Cyrillic or Greek words are left alone.
+_CONFUSABLES = str.maketrans({
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "і": "i",
+    "ј": "j", "ѕ": "s", "ԁ": "d", "һ": "h", "ӏ": "l", "А": "A", "В": "B", "Е": "E",
+    "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P", "С": "C", "Т": "T", "Х": "X",
+    "У": "Y", "І": "I", "Ј": "J", "Ѕ": "S", "α": "a", "ο": "o", "ν": "v", "ρ": "p",
+    "ι": "i", "κ": "k", "τ": "t", "υ": "u", "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z",
+    "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T",
+    "Υ": "Y", "Χ": "X",
+})
+_WORD = re.compile(r"[^\W\d_]+")
+
+
+def _fold_mixed_script(match: "re.Match[str]") -> str:
+    word = match.group()
+    has_latin = any("a" <= c.lower() <= "z" for c in word)
+    has_other = any(("Ͱ" <= c <= "Ͽ") or ("Ѐ" <= c <= "ӿ") or ("Ԁ" <= c <= "ԯ") for c in word)
+    return word.translate(_CONFUSABLES) if has_latin and has_other else word
+
+
+def sanitize_unicode(text: str) -> str:
+    """Make what the detector sees match what a language model reads.
+
+    PDF extractors inject zero-width spaces, soft hyphens and direction marks;
+    crafted documents can add tag characters or lookalike letters. Each of these
+    lets PII (or hidden instructions) slip past regexes and the Review panel
+    while the AI still reads it.
+    """
+    # NFKC folds fullwidth letters and ligatures: "Ｊｏｈｎ" -> "John", "ﬀ" -> "ff".
+    text = unicodedata.normalize("NFKC", text)
+    # Every format character (Cf): zero-width, bidi, soft hyphen, BOM, tags...
+    text = "".join(c for c in text if unicodedata.category(c) != "Cf")
+    text = _INVISIBLE_EXTRA.sub("", text)
+    text = re.sub(r"[  -   　]", " ", text)
+    return _WORD.sub(_fold_mixed_script, text)
+
+
+# Also the forms Docling's Markdown export produces: "[PERSON\_1]", "[PERSON \_ 1]".
+_PLACEHOLDER_LIKE = re.compile(r"\[\s*([A-Z]{2,}(?:\s*\\?_\s*[A-Z0-9]+)*)\s*\]")
+
+
+def neutralize_placeholders(text: str) -> str:
+    """Turn bracket tokens already in a document ("[PERSON_1]") into "(PERSON_1)"
+    so they can't be mistaken for, or rehydrated as, real redactions."""
+    return _PLACEHOLDER_LIKE.sub(lambda m: "(" + re.sub(r"[\s\\]", "", m.group(1)) + ")", text)
+
+
+_NAME_PART = r"[A-Z][A-Za-z'\u2019-]+"
+_NAME_BEFORE_PERSON = re.compile(rf"(?<![\w\[(])({_NAME_PART})([ \t]+\[PERSON_\d+\])")
+_NAME_AFTER_PERSON = re.compile(rf"(\[PERSON_\d+\])([ \t]+)({_NAME_PART})(?![\w\]])")
+
+# Capitalized words that sit next to names without being part of them.
+NAME_NEIGHBOUR_WORDS = {
+    "the", "and", "or", "of", "for", "to", "from", "in", "on", "at", "by", "with", "dear", "hi", "hello",
+    "mr", "mrs", "ms", "miss", "dr", "prof", "jr", "sr", "ii", "iii", "iv", "esq", "md", "phd", "cpa",
+    "name", "employee", "employer", "client", "patient", "student", "taxpayer", "spouse", "recipient",
+    "payer", "borrower", "signed", "signature", "date", "address", "phone", "email", "ssn", "inc", "llc",
+    "corp", "co", "ltd", "is", "was", "has", "had", "will", "can", "did", "does", "said", "says",
+    "ref", "re", "no", "id", "tel", "fax", "cell", "mobile", "dob", "attn", "cc", "note", "notes", "account",
+}
 
 
 def print_redaction_summary(anonymizer: GLiNERAnonymizer):
